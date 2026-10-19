@@ -1,0 +1,242 @@
+<!-- Página entera. Se divide en cuatro bloques: ficheros/parámetros y los pasos 1, 2 y 3.
+     Los pasos solo aparecen cuando ya hay algo que enseñar (por los @if). -->
+<main class="mx-auto max-w-6xl p-6 space-y-6">
+  <h1 class="text-2xl font-semibold text-slate-800">CIF</h1>
+
+  <!-- Ficheros y parámetros -->
+  <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+    <div>
+      <label class="mb-1 block text-sm font-medium text-slate-700" for="ficheros">Ficheros CSV (puedes elegir varios)</label>
+      <!-- multiple deja elegir varios CSV a la vez. Al cambiar la selección se llama a alElegirFicheros -->
+      <input
+        id="ficheros"
+        type="file"
+        accept=".csv,text/csv"
+        multiple
+        (change)="alElegirFicheros($event)"
+        class="block text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
+      />
+      <!-- Debajo del input: cuántos ficheros, cuánto pesan y cómo se llaman -->
+      @if (ficheros().length > 0) {
+        <p class="mt-1 text-xs text-slate-500">
+          {{ ficheros().length }} fichero(s), {{ megasTotales().toFixed(1) }} MB:
+          <!-- $last para no poner coma detrás del último nombre -->
+          @for (f of ficheros(); track f.name; let ultimo = $last) {
+            {{ f.name }}{{ ultimo ? '' : ', ' }}
+          }
+        </p>
+      }
+    </div>
+
+    <!-- Formulario de columnas. Al darle a Procesar (o a Enter) se ejecuta procesar().
+         Cada input está enlazado en los dos sentidos con [(ngModel)] a "parametros". -->
+    <form class="grid gap-4 sm:grid-cols-5" (ngSubmit)="procesar()">
+      <label class="text-sm text-slate-700">
+        Columna timestamp
+        <input name="timestamp" [(ngModel)]="parametros.timestamp" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+      </label>
+      <label class="text-sm text-slate-700">
+        Columna id
+        <input name="id" [(ngModel)]="parametros.id" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+      </label>
+      <label class="text-sm text-slate-700">
+        Columna valor
+        <input name="valor" [(ngModel)]="parametros.valor" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+      </label>
+      <label class="text-sm text-slate-700">
+        Columna tipo
+        <input name="tipo" [(ngModel)]="parametros.tipo" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+      </label>
+      <!-- Desplegable con las opciones de OPCIONES_RELLENO (fusionar.ts) -->
+      <label class="text-sm text-slate-700">
+        Rellenar huecos con
+        <select name="relleno" [(ngModel)]="relleno" class="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1">
+          @for (opcion of opcionesRelleno; track opcion.valor) {
+            <option [value]="opcion.valor">{{ opcion.texto }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="sm:col-span-5">
+        <!-- Desactivado si no hay ficheros o si ya está procesando (para no lanzarlo dos veces) -->
+        <button
+          type="submit"
+          [disabled]="ficheros().length === 0 || procesando()"
+          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {{ procesando() ? 'Procesando…' : 'Procesar' }}
+        </button>
+      </div>
+    </form>
+
+    <!-- Recuadro rojo con el error de los pasos 1 y 2, si lo hay -->
+    @if (error(); as mensaje) {
+      <p class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ mensaje }}</p>
+    }
+  </section>
+
+  <!-- Paso 1: pivotado -->
+  <!-- "as t" guarda la tabla en t para no tener que llamar a tabla() todo el rato -->
+  @if (tabla(); as t) {
+    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="font-semibold text-slate-800">1. Pivotado</h2>
+          <p class="text-sm text-slate-700">
+            <strong>{{ t.filas.length }}</strong> filas (timestamps) ·
+            <strong>{{ t.ids.length }}</strong> columnas de ids
+            <span class="text-slate-500">(+ la columna {{ t.columnaTimestamp }})</span>
+          </p>
+        </div>
+        <!-- type="button" para que no cuente como submit de ningún formulario -->
+        <button
+          type="button"
+          (click)="descargar(t, '1_pivotado.csv')"
+          class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+        >
+          Descargar 1_pivotado.csv
+        </button>
+      </div>
+      <app-vista-previa [tabla]="t" />
+    </section>
+  }
+
+  <!-- Paso 2: fusionado por tipo -->
+  @if (fusion(); as f) {
+    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="space-y-2">
+          <h2 class="font-semibold text-slate-800">2. Fusionado por tipo</h2>
+          <!-- Resumen general de la tabla fusionada -->
+          <p class="text-sm text-slate-700">
+            <strong>{{ f.tipos.length }}</strong> tipo(s) ·
+            <strong>{{ f.filas.length }}</strong> filas ·
+            <strong>{{ f.ids.length }}</strong> columnas
+            <span class="text-slate-500">(+ la columna {{ f.columnaTimestamp }})</span> ·
+            <strong>{{ f.huecosRellenados }}</strong> de {{ f.huecos }} huecos rellenados
+          </p>
+          <!-- Una línea por cada tipo con sus columnas y sus timestamps (sale de ResumenTipo) -->
+          <table class="text-sm">
+            <thead class="text-left text-slate-500">
+              <tr>
+                <th class="pr-6 font-medium">Tipo</th>
+                <th class="pr-6 text-right font-medium">Columnas</th>
+                <th class="text-right font-medium">Timestamps</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-700">
+              @for (tipo of f.tipos; track tipo.tipo) {
+                <tr>
+                  <td class="pr-6 font-mono">{{ tipo.tipo }}</td>
+                  <td class="pr-6 text-right">{{ tipo.columnas }}</td>
+                  <td class="text-right">{{ tipo.filas }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <button
+          type="button"
+          (click)="descargar(f, '2_fusionado.csv')"
+          class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+        >
+          Descargar 2_fusionado.csv
+        </button>
+      </div>
+      <!-- La misma vista previa que en el paso 1 (TablaFusionada extiende TablaPivotada) -->
+      <app-vista-previa [tabla]="f" />
+    </section>
+  }
+
+  <!-- Paso 3: Isolation Forest sobre la tabla fusionada -->
+  <!-- Solo aparece cuando ya existe la tabla del paso 2, porque es la que se analiza -->
+  @if (fusion()) {
+    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+      <h2 class="font-semibold text-slate-800">3. Isolation Forest</h2>
+
+      <!-- Parámetros del bosque. Los min/max/step del input son solo ayuda visual;
+           la comprobación de verdad la hace validarParametrosIF -->
+      <form class="grid gap-4 sm:grid-cols-3" (ngSubmit)="ejecutarIF()">
+        <label class="text-sm text-slate-700">
+          Número de árboles
+          <input name="numArboles" type="number" min="1" step="1" [(ngModel)]="parametrosIF.numArboles" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+        </label>
+        <label class="text-sm text-slate-700">
+          Umbral
+          <input name="umbral" type="number" min="0" max="1" step="0.01" [(ngModel)]="parametrosIF.umbral" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+        </label>
+        <label class="text-sm text-slate-700">
+          Tamaño de muestra
+          <input name="tamanoMuestra" type="number" min="2" step="1" [(ngModel)]="parametrosIF.tamanoMuestra" class="mt-1 w-full rounded border border-slate-300 px-2 py-1" />
+        </label>
+
+        <div class="sm:col-span-3">
+          <button
+            type="submit"
+            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Ejecutar Isolation Forest
+          </button>
+        </div>
+      </form>
+
+      <!-- Error del paso 3 (parámetros mal puestos o muy pocas filas) -->
+      @if (errorIF(); as mensaje) {
+        <p class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ mensaje }}</p>
+      }
+
+      @if (resultadoIF(); as r) {
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <!-- Resumen: cuántas anomalías, y el score mínimo, medio y máximo con 4 decimales -->
+          <div class="space-y-1 text-sm text-slate-700">
+            <p>
+              <!-- &gt; es el símbolo ">" escrito para HTML -->
+              <strong>{{ r.numAnomalias }}</strong> anomalías (score &gt; {{ parametrosIF.umbral }}) de {{ r.filas.length }} filas
+            </p>
+            <p>
+              Score mínimo <strong>{{ r.scoreMinimo.toFixed(4) }}</strong> ·
+              medio <strong>{{ r.scoreMedio.toFixed(4) }}</strong> ·
+              máximo <strong>{{ r.scoreMaximo.toFixed(4) }}</strong>
+            </p>
+            <p class="text-xs text-slate-500">Muestra usada por árbol: {{ r.tamanoMuestra }} filas</p>
+            <!-- Aviso en naranja si alguna celda no era un número y se ha cambiado por 0 -->
+            @if (r.celdasNoNumericas > 0) {
+              <p class="text-xs text-amber-700">{{ r.celdasNoNumericas }} celdas vacías o no numéricas se han tratado como 0.</p>
+            }
+          </div>
+          <button
+            type="button"
+            (click)="descargarScores(r)"
+            class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+          >
+            Descargar 3_scores.csv
+          </button>
+        </div>
+
+        <!-- Top 10 de filas más raras según el bosque (topScores en el .ts) -->
+        <div>
+          <p class="mb-2 text-xs text-slate-500">Las {{ topScores().length }} filas con score más alto:</p>
+          <table class="text-sm">
+            <thead class="text-left text-slate-500">
+              <tr>
+                <th class="pr-6 font-medium">Timestamp</th>
+                <th class="pr-6 text-right font-medium">Score</th>
+                <th class="font-medium">Anomalía</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-700">
+              @for (fila of topScores(); track fila.timestamp) {
+                <tr class="border-t border-slate-100">
+                  <td class="pr-6 font-mono">{{ fila.timestamp }}</td>
+                  <td class="pr-6 text-right font-mono">{{ fila.score.toFixed(4) }}</td>
+                  <!-- Si pasa del umbral sale "Sí" en rojo y negrita, si no "No" en gris -->
+                  <td [class]="fila.anomalia ? 'font-semibold text-red-600' : 'text-slate-500'">{{ fila.anomalia ? 'Sí' : 'No' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</main>

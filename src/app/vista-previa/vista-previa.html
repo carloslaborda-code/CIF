@@ -1,0 +1,32 @@
+<!-- Vista previa: solo las primeras filas de la tabla (por defecto 10) -->
+<p class="mb-2 text-xs text-slate-500">Primeras {{ filas().length }} filas:</p>
+<!-- Caja con scroll en las dos direcciones, porque la tabla fusionada tiene muchísimas columnas -->
+<div class="max-h-[28rem] overflow-auto rounded border border-slate-200">
+  <table class="min-w-full text-xs">
+    <!-- sticky top-0: la cabecera se queda arriba al bajar con el scroll -->
+    <thead class="sticky top-0 bg-slate-100 text-slate-700">
+      <tr>
+        <!-- La columna del timestamp también es sticky (left-0) para no perderla al ir a la derecha -->
+        <th class="sticky left-0 bg-slate-100 px-2 py-1 text-left whitespace-nowrap">{{ tabla().columnaTimestamp }}</th>
+        <!-- Una cabecera por cada id (o tipo_id en la fusionada) -->
+        @for (columna of tabla().ids; track columna) {
+          <th class="px-2 py-1 text-right whitespace-nowrap">{{ columna }}</th>
+        }
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Los timestamps no se repiten, así que valen como track -->
+      @for (fila of filas(); track fila.timestamp) {
+        <!-- odd/even: filas alternas de distinto color para leer mejor -->
+        <tr class="border-t border-slate-100 odd:bg-white even:bg-slate-50">
+          <!-- bg-inherit para que la celda fija coja el mismo color que su fila -->
+          <td class="sticky left-0 bg-inherit px-2 py-1 whitespace-nowrap font-mono">{{ fila.timestamp }}</td>
+          <!-- Aquí los valores sí pueden repetirse, por eso track por posición ($index) -->
+          @for (valor of fila.valores; track $index) {
+            <td class="px-2 py-1 text-right font-mono">{{ valor }}</td>
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

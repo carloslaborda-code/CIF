@@ -1,0 +1,11 @@
+/* Estilos globales: Tailwind */
+/* Estas tres líneas meten todo Tailwind. Por eso en los HTML usamos clases tipo
+   "rounded", "bg-blue-600" o "text-sm" en vez de escribir CSS a mano. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fondo gris clarito para toda la página, así las tarjetas blancas se distinguen */
+body {
+  @apply bg-slate-50;
+}
