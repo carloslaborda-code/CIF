@@ -21,15 +21,35 @@ import {
 } from './pivotar';
 
 /** Cómo rellenar las celdas vacías de la tabla fusionada. */
-export type ModoRelleno = 'cero' | 'anterior' | 'vacio';
+export type ModoRelleno = 'fijo' | 'anterior' | 'vacio';
 
 /** Opciones para el desplegable del formulario. */
 // "valor" es lo que se guarda internamente y "texto" lo que ve el usuario en el select.
 export const OPCIONES_RELLENO: { valor: ModoRelleno; texto: string }[] = [
-  { valor: 'cero', texto: '0' },
+  { valor: 'fijo', texto: 'Valor fijo (0 a 1)' },
   { valor: 'anterior', texto: 'Valor anterior' },
   { valor: 'vacio', texto: 'Dejar vacío' },
 ];
+
+/** Valor con el que se rellena en el modo 'fijo' si el usuario no pone otro. */
+export const VALOR_RELLENO_POR_DEFECTO = 0;
+
+/**
+ * Comprueba el valor de relleno del modo 'fijo'.
+ * Devuelve un mensaje de error, o null si está bien.
+ */
+export function validarRelleno(modo: ModoRelleno, valor: number): string | null {
+  // En los otros modos el valor no se usa, así que da igual lo que tenga.
+  if (modo !== 'fijo') {
+    return null;
+  }
+  // Igual que con el umbral: si se borra el input, ngModel deja null.
+  // El !(...) también pilla el NaN.
+  if (typeof valor !== 'number' || !(valor >= 0 && valor <= 1)) {
+    return 'El valor de relleno debe ser un número entre 0 y 1.';
+  }
+  return null;
+}
 
 /** Nombre que se usa cuando una fila no tiene tipo. */
 export const TIPO_DESCONOCIDO = 'sin_tipo';
@@ -151,7 +171,7 @@ export function contarHuecos(tabla: TablaPivotada): number {
  * Rellena las celdas vacías según el modo y devuelve una tabla nueva
  * (no modifica la de entrada) junto con cuántas celdas se han rellenado.
  *
- * - 'cero':     cada hueco pasa a ser "0".
+ * - 'fijo':     cada hueco pasa a ser `valor` (entre 0 y 1, ver validarRelleno).
  * - 'anterior': cada hueco toma el último valor conocido de su columna
  *               (las filas van ordenadas por timestamp). Si la columna empieza
  *               con huecos y no hay valor anterior, se pone "0".
@@ -160,11 +180,14 @@ export function contarHuecos(tabla: TablaPivotada): number {
 export function rellenarHuecos(
   tabla: TablaPivotada,
   modo: ModoRelleno,
+  valor: number = VALOR_RELLENO_POR_DEFECTO,
 ): { tabla: TablaPivotada; rellenados: number } {
   if (modo === 'vacio') {
     return { tabla, rellenados: 0 };
   }
 
+  // Las celdas de la tabla son texto, así que el valor fijo también.
+  const textoFijo = String(valor);
   let rellenados = 0;
   // Último valor visto en cada columna (para el modo 'anterior').
   // Empieza en '0' para cubrir el caso de que la columna arranque con huecos.
@@ -172,14 +195,14 @@ export function rellenarHuecos(
 
   // Vamos fila a fila de arriba abajo, que es el orden temporal.
   const filas = tabla.filas.map((fila) => {
-    const valores = fila.valores.map((valor, c) => {
-      if (valor !== '') {
+    const valores = fila.valores.map((celda, c) => {
+      if (celda !== '') {
         // Celda con dato: la dejamos y nos apuntamos el valor para los huecos que vengan.
-        ultimos[c] = valor;
-        return valor;
+        ultimos[c] = celda;
+        return celda;
       }
       rellenados++;
-      return modo === 'cero' ? '0' : ultimos[c];
+      return modo === 'fijo' ? textoFijo : ultimos[c];
     });
     return { timestamp: fila.timestamp, valores };
   });
@@ -195,6 +218,7 @@ export function fusionar(
   lecturas: Lectura[],
   columnaTimestamp: string,
   modo: ModoRelleno,
+  valorRelleno: number = VALOR_RELLENO_POR_DEFECTO,
 ): TablaFusionada {
   // 1. Separar por tipo
   const porTipo = dividirPorTipo(lecturas);
@@ -213,7 +237,22 @@ export function fusionar(
   // Contamos los huecos antes de rellenar, si no siempre saldría 0
   const huecos = contarHuecos(alineada);
   // 4. Rellenar
-  const { tabla, rellenados } = rellenarHuecos(alineada, modo);
+  const { tabla, rellenados } = rellenarHuecos(alineada, modo, valorRelleno);
 
   return { ...tabla, tipos, huecos, huecosRellenados: rellenados };
+}
+
+/**
+ * Para un CSV que ya viene pivotado: no hay que dividir ni alinear,
+ * solo rellenar sus huecos. Se devuelve como TablaFusionada (sin tipos)
+ * para que el resto de la página (vista previa, descarga, paso 3) lo trate igual.
+ */
+export function prepararTablaPivotada(
+  tablaCargada: TablaPivotada,
+  modo: ModoRelleno,
+  valorRelleno: number = VALOR_RELLENO_POR_DEFECTO,
+): TablaFusionada {
+  const huecos = contarHuecos(tablaCargada);
+  const { tabla, rellenados } = rellenarHuecos(tablaCargada, modo, valorRelleno);
+  return { ...tabla, tipos: [], huecos, huecosRellenados: rellenados };
 }

@@ -1,7 +1,15 @@
 import { Component, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { fusionar, ModoRelleno, OPCIONES_RELLENO, TablaFusionada } from '../core/logica/fusionar';
+import {
+  fusionar,
+  ModoRelleno,
+  OPCIONES_RELLENO,
+  prepararTablaPivotada,
+  TablaFusionada,
+  VALOR_RELLENO_POR_DEFECTO,
+  validarRelleno,
+} from '../core/logica/fusionar';
 import {
   ejecutarIsolationForest,
   filasConMasScore,
@@ -11,7 +19,7 @@ import {
   scoresACsv,
   validarParametrosIF,
 } from '../core/logica/aplicar-isolation-forest';
-import { leerVariosCsv } from '../core/logica/leer-csv';
+import { leerCsvPivotado, leerVariosCsv } from '../core/logica/leer-csv';
 import {
   PARAMETROS_POR_DEFECTO,
   ParametrosColumnas,
@@ -21,6 +29,13 @@ import {
   validarParametros,
 } from '../core/logica/pivotar';
 import { VistaPrevia } from '../vista-previa/vista-previa';
+
+/**
+ * De dónde salen los datos:
+ * - 'largo':    CSV en formato largo, se pivotan y se fusionan (pasos 1 y 2).
+ * - 'pivotado': un CSV ya pivotado, solo se rellenan sus huecos y va al paso 3.
+ */
+type OrigenDatos = 'largo' | 'pivotado';
 
 /**
  * Página principal: elegir CSVs, indicar columnas, procesar y descargar.
@@ -37,10 +52,14 @@ export class PaginaPrincipal {
   // mejor con propiedades normales. Hacemos copia con {...} para no modificar
   // las constantes por defecto al escribir en el formulario.
 
+  /** Tipo de CSV que se va a cargar. */
+  protected origen: OrigenDatos = 'largo';
   /** Nombres de las columnas (enlazados al formulario con ngModel). */
   protected parametros: ParametrosColumnas = { ...PARAMETROS_POR_DEFECTO };
   /** Cómo rellenar los huecos de la tabla fusionada. */
-  protected relleno: ModoRelleno = 'cero';
+  protected relleno: ModoRelleno = 'fijo';
+  /** Valor con el que se rellenan los huecos en el modo 'fijo' (entre 0 y 1). */
+  protected valorRelleno: number = VALOR_RELLENO_POR_DEFECTO;
   protected readonly opcionesRelleno = OPCIONES_RELLENO;
   /** Parámetros del Isolation Forest (paso 3). */
   protected parametrosIF: ParametrosIsolationForest = { ...PARAMETROS_IF_POR_DEFECTO };
@@ -52,8 +71,12 @@ export class PaginaPrincipal {
   protected readonly error = signal<string | null>(null);
   /** Paso 1: todas las lecturas pivotadas por id. */
   protected readonly tabla = signal<TablaPivotada | null>(null);
-  /** Paso 2: tipos pivotados por separado, alineados y con huecos rellenados. */
+  /** Paso 2: tipos pivotados por separado, alineados y con huecos rellenados
+   *  (o el CSV ya pivotado con sus huecos rellenados). */
   protected readonly fusion = signal<TablaFusionada | null>(null);
+  /** Origen con el que se ha generado `fusion` (para el título del paso 2). */
+  // Va aparte de `origen` porque el usuario puede cambiar el selector después de procesar.
+  protected readonly origenProcesado = signal<OrigenDatos>('largo');
   /** Paso 3: scores del Isolation Forest sobre la tabla fusionada. */
   protected readonly resultadoIF = signal<ResultadoIsolationForest | null>(null);
   // El error del paso 3 va aparte para que salga debajo de su propio formulario.
@@ -75,6 +98,11 @@ export class PaginaPrincipal {
     // input.files es una FileList, no un array, por eso el Array.from.
     this.ficheros.set(Array.from(input.files ?? []));
     // Si cambian los ficheros, los resultados de antes ya no valen y los quitamos.
+    this.limpiarResultados();
+  }
+
+  /** Quita los resultados y errores de un procesado anterior. */
+  protected limpiarResultados(): void {
     this.tabla.set(null);
     this.fusion.set(null);
     this.resultadoIF.set(null);
@@ -82,11 +110,25 @@ export class PaginaPrincipal {
     this.error.set(null);
   }
 
-  /** Lee los CSV, los pivota (paso 1) y los fusiona por tipo (paso 2). */
+  /**
+   * Formato largo: lee los CSV, los pivota (paso 1) y los fusiona por tipo (paso 2).
+   * Ya pivotado: lee el CSV y rellena sus huecos (paso 2), sin paso 1.
+   */
   protected async procesar(): Promise<void> {
     const ficheros = this.ficheros();
     // El botón ya está desactivado sin ficheros, pero por si acaso.
     if (ficheros.length === 0) {
+      return;
+    }
+
+    const errorRelleno = validarRelleno(this.relleno, this.valorRelleno);
+    if (errorRelleno) {
+      this.error.set(errorRelleno);
+      return;
+    }
+
+    if (this.origen === 'pivotado') {
+      await this.procesarPivotado(ficheros);
       return;
     }
 
@@ -106,11 +148,7 @@ export class PaginaPrincipal {
 
     // Limpiamos lo anterior y ponemos el botón en "Procesando…".
     this.procesando.set(true);
-    this.error.set(null);
-    this.tabla.set(null);
-    this.fusion.set(null);
-    this.resultadoIF.set(null);
-    this.errorIF.set(null);
+    this.limpiarResultados();
 
     try {
       // Los CSV se leen una sola vez y con esas lecturas se hacen los dos pasos.
@@ -119,13 +157,36 @@ export class PaginaPrincipal {
         throw new Error('Los CSV no tienen filas con datos.');
       }
       this.tabla.set(pivotar(lecturas, p.timestamp));
-      this.fusion.set(fusionar(lecturas, p.timestamp, this.relleno));
+      this.fusion.set(fusionar(lecturas, p.timestamp, this.relleno, this.valorRelleno));
+      this.origenProcesado.set('largo');
     } catch (e) {
       // Lo que se lance en la lectura (p. ej. una columna que no existe) acaba aquí
       // y se enseña en el recuadro rojo.
       this.error.set(e instanceof Error ? e.message : String(e));
     } finally {
       // Pase lo que pase, el botón tiene que volver a estar disponible.
+      this.procesando.set(false);
+    }
+  }
+
+  /** Lee un CSV ya pivotado y rellena sus huecos; queda listo para el paso 3. */
+  private async procesarPivotado(ficheros: File[]): Promise<void> {
+    // Un CSV pivotado ya es la tabla entera, no tiene sentido juntar varios.
+    if (ficheros.length !== 1) {
+      this.error.set('Con un CSV ya pivotado elige un solo fichero.');
+      return;
+    }
+
+    this.procesando.set(true);
+    this.limpiarResultados();
+
+    try {
+      const tablaCargada = await leerCsvPivotado(ficheros[0]);
+      this.fusion.set(prepararTablaPivotada(tablaCargada, this.relleno, this.valorRelleno));
+      this.origenProcesado.set('pivotado');
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : String(e));
+    } finally {
       this.procesando.set(false);
     }
   }

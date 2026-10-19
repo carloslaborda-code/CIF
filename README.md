@@ -17,7 +17,10 @@ npm install
 npm start
 ```
 
-Abre http://localhost:4200, elige uno o varios CSV, pulsa **Procesar** y después **Ejecutar Isolation Forest**.
+Abre http://localhost:4200, elige el tipo de CSV y el fichero o ficheros, pulsa **Procesar** y después **Ejecutar Isolation Forest**.
+
+- **Formato largo:** uno o varios CSV; se hacen los pasos 1 y 2.
+- **Ya pivotado:** un solo CSV que ya tiene una fila por timestamp y una columna por sensor (por ejemplo un `2_fusionado.csv`). No se pivota ni se fusiona: solo se rellenan sus huecos y queda listo para el paso 3.
 
 ## CSV de entrada
 
@@ -30,6 +33,10 @@ Formato largo, con cabecera. Por ejemplo:
 
 Las columnas `alias`, `description`, `nombre_interno` y `names` se ignoran.
 
+### CSV ya pivotado
+
+La primera columna es el timestamp y el resto son columnas de datos. El separador (`;` o `,`) se detecta solo. Las filas se usan en el orden del fichero, las celdas vacías son huecos y las filas sin timestamp se descartan. Da error si hay columnas o timestamps repetidos o si una fila tiene más celdas que la cabecera.
+
 ## Parámetros
 
 | Parámetro | Por defecto | Significado |
@@ -38,7 +45,8 @@ Las columnas `alias`, `description`, `nombre_interno` y `names` se ignoran.
 | Columna id | `uid` | Identificador del sensor |
 | Columna valor | `value` | Valor medido |
 | Columna tipo | `name` | Tipo de dato |
-| Rellenar huecos con | `0` | `0`, valor anterior de la columna (o `0` si no hay) o dejar vacío |
+| Rellenar huecos con | Valor fijo | Valor fijo, valor anterior de la columna (o `0` si no hay) o dejar vacío |
+| Valor de relleno | `0` | Con "Valor fijo", número entre 0 y 1 que se pone en cada hueco |
 | Número de árboles | `10` | Árboles del bosque |
 | Umbral | `0.70` | Una fila es anomalía si su score es mayor que el umbral |
 | Tamaño de muestra | `256` | Filas al azar con las que se entrena cada árbol (si hay menos, se usan todas) |
