@@ -5,7 +5,9 @@
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "watch": "ng build --watch --configuration development",
+    "test": "node pruebas/ejecutar.mjs",
+    "comparar": "node pruebas/ejecutar.mjs --script pruebas/comparar-motores.ts"
   },
   "private": true,
   "packageManager": "npm@10.9.4",

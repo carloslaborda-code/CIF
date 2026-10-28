@@ -5,5 +5,4 @@ import { App } from './app/app';
 
 // Arrancamos Angular con el componente raíz (App) y la configuración de app.config.ts.
 // Si algo peta al arrancar, al menos que salga en la consola del navegador.
-bootstrapApplication(App, appConfig)
-  .catch((err) => console.error(err));
+bootstrapApplication(App, appConfig).catch((err) => console.error(err));

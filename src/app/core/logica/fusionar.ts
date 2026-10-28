@@ -10,15 +10,9 @@
  *   3. Alinear: una fila por cada timestamp de cualquier tipo, y todas las columnas.
  *   4. Rellenar los huecos que quedan.
  *
- * Esta tabla fusionada es la que luego le pasamos al Isolation Forest (paso 3).
+ * Esta tabla fusionada es la que luego le pasamos al CIF (paso 4).
  */
-import {
-  compararTimestamps,
-  FilaPivotada,
-  Lectura,
-  pivotar,
-  TablaPivotada,
-} from './pivotar';
+import { compararTimestamps, FilaPivotada, Lectura, pivotar, TablaPivotada } from './pivotar';
 
 /** Cómo rellenar las celdas vacías de la tabla fusionada. */
 export type ModoRelleno = 'fijo' | 'anterior' | 'vacio';
@@ -105,7 +99,11 @@ export function nombreColumna(tipo: string, id: string): string {
 }
 
 /** Pivota un tipo con la función del paso 1 y renombra sus columnas como tipo_id. */
-export function pivotarTipo(tipo: string, lecturas: Lectura[], columnaTimestamp: string): TablaPivotada {
+export function pivotarTipo(
+  tipo: string,
+  lecturas: Lectura[],
+  columnaTimestamp: string,
+): TablaPivotada {
   const tabla = pivotar(lecturas, columnaTimestamp);
   // Solo cambian los nombres de las columnas, las filas se quedan igual.
   return { ...tabla, ids: tabla.ids.map((id) => nombreColumna(tipo, id)) };
@@ -245,7 +243,7 @@ export function fusionar(
 /**
  * Para un CSV que ya viene pivotado: no hay que dividir ni alinear,
  * solo rellenar sus huecos. Se devuelve como TablaFusionada (sin tipos)
- * para que el resto de la página (vista previa, descarga, paso 3) lo trate igual.
+ * para que el resto de la página (vista previa, descarga, CIF) lo trate igual.
  */
 export function prepararTablaPivotada(
   tablaCargada: TablaPivotada,

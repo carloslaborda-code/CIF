@@ -120,7 +120,9 @@ export function filasATablaPivotada(filas: string[][], nombreFichero: string): T
   const nombres = (cabecera ?? []).map((n) => n.trim());
 
   if (nombres.length < 2) {
-    throw new Error(`${nombreFichero}: hace falta una columna de timestamp y al menos una columna de datos.`);
+    throw new Error(
+      `${nombreFichero}: hace falta una columna de timestamp y al menos una columna de datos.`,
+    );
   }
   const [columnaTimestamp, ...ids] = nombres;
   if (ids.some((id) => id === '')) {
@@ -145,7 +147,9 @@ export function filasATablaPivotada(filas: string[][], nombreFichero: string): T
       continue;
     }
     if (timestampsVistos.has(timestamp)) {
-      throw new Error(`${nombreFichero}: el timestamp "${timestamp}" está repetido (línea ${linea}).`);
+      throw new Error(
+        `${nombreFichero}: el timestamp "${timestamp}" está repetido (línea ${linea}).`,
+      );
     }
     timestampsVistos.add(timestamp);
     // Completamos con huecos si la fila se queda corta.
@@ -163,7 +167,7 @@ export function filasATablaPivotada(filas: string[][], nombreFichero: string): T
 
 /**
  * Lee un CSV ya pivotado (por ejemplo un 2_fusionado.csv) para usarlo
- * directamente en el paso 3. El separador (';' o ',') lo detecta PapaParse.
+ * directamente en el CIF (paso 4). El separador (';' o ',') lo detecta PapaParse.
  *
  * Aquí no se lee por trozos: un CSV pivotado no lleva la columna "names"
  * y ocupa mucho menos que el de formato largo.

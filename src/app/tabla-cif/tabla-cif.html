@@ -1,0 +1,177 @@
+<!-- Controles: cuántas filas y por qué columna ordenar -->
+<div class="flex flex-wrap items-center gap-4 text-sm text-slate-700">
+  <label class="flex items-center gap-2">
+    Ver las
+    <select
+      [ngModel]="numFilas()"
+      (ngModelChange)="numFilas.set(+$event)"
+      class="rounded border border-slate-300 bg-white px-2 py-1"
+    >
+      @for (n of opcionesNumFilas; track n) {
+        <option [value]="n">{{ n }}</option>
+      }
+    </select>
+    filas con mayor
+  </label>
+  <select
+    [ngModel]="orden()"
+    (ngModelChange)="orden.set($event)"
+    class="rounded border border-slate-300 bg-white px-2 py-1"
+  >
+    <option value="score">IF score</option>
+    <option value="ii">II (intensidad)</option>
+    <option value="ri">RI (recurrencia)</option>
+  </select>
+</div>
+
+<!-- Tabla como la Tabla 5 del artículo -->
+<div class="overflow-auto rounded border border-slate-200">
+  <table class="min-w-full text-xs">
+    <thead class="bg-slate-100 text-slate-700">
+      <!-- Primera fila de cabecera: los grupos -->
+      <tr>
+        <th rowspan="2" class="border-b border-r border-slate-200 px-2 py-1 text-left">An.</th>
+        <th colspan="5" class="border-r border-slate-200 px-2 py-1 text-left">Valores</th>
+        @for (g of grupos(); track $index) {
+          <th [attr.colspan]="g.columnas" class="border-r border-slate-200 px-2 py-1 text-left">
+            {{ g.nombre }}
+          </th>
+        }
+      </tr>
+      <!-- Segunda fila: las columnas -->
+      <tr class="border-b border-slate-200">
+        <th class="px-2 py-1 text-left">ID</th>
+        <th class="px-2 py-1 text-left">Timestamp</th>
+        <th class="px-2 py-1 text-right">IF Sc</th>
+        <th class="px-2 py-1 text-right">II</th>
+        <th class="border-r border-slate-200 px-2 py-1 text-right">RI</th>
+        @for (p of resultado().particiones; track $index) {
+          <th
+            class="px-2 py-1 text-right whitespace-nowrap"
+            [title]="p.contexto + ' / ' + p.particion"
+          >
+            {{ p.particion }}
+          </th>
+        }
+      </tr>
+    </thead>
+    <tbody class="font-mono text-slate-800">
+      @for (f of filasVisibles(); track f.id) {
+        <tr class="border-t border-white">
+          <!-- Y en rosa (anomalía global) y N en verde, como en el artículo -->
+          <td [class]="f.anomalia ? 'bg-red-100 px-2 py-1' : 'bg-green-100 px-2 py-1'">
+            {{ f.anomalia ? 'Y' : 'N' }}
+          </td>
+          <td class="px-2 py-1">{{ f.id }}</td>
+          <td class="px-2 py-1 whitespace-nowrap text-slate-500">{{ f.timestamp }}</td>
+          <td class="px-2 py-1 text-right" [style.background-color]="color(f.score, escalaScore())">
+            {{ f.score.toFixed(3) }}
+          </td>
+          <td class="px-2 py-1 text-right">{{ f.ii > 0 ? f.ii.toFixed(2) : '0' }}</td>
+          <td class="border-r border-slate-200 px-2 py-1 text-right">{{ f.ri.toFixed(2) }}</td>
+          <!-- Las particiones donde no es anomalía valen 0 y van en gris -->
+          @for (v of f.valores; track $index) {
+            @if (v > 0) {
+              <td
+                class="px-2 py-1 text-right"
+                [style.background-color]="color(v, escalaParticiones())"
+                [title]="'Score: ' + f.brutos[$index].toFixed(4)"
+              >
+                {{ v.toFixed(2) }}
+              </td>
+            } @else {
+              <td
+                class="bg-slate-100 px-2 py-1 text-right text-slate-500"
+                [title]="'Score sin umbral: ' + f.brutos[$index].toFixed(4)"
+              >
+                0
+              </td>
+            }
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+<p class="text-xs text-slate-500">
+  Cada partición muestra su score si pasa el umbral ({{ resultado().umbral }}) y 0 si no (pasa el
+  ratón por encima para ver el score sin umbral). RI = particiones donde es anomalía /
+  {{ resultado().particiones.length }}. II = mediana de los valores de todas las particiones,
+  contando los 0.
+</p>
+
+<!-- Comparación de contextos y particiones -->
+<div class="grid gap-6 lg:grid-cols-2">
+  <div>
+    <h3 class="mb-2 text-sm font-semibold text-slate-800">Comparación de contextos</h3>
+    <table class="text-sm">
+      <thead class="text-left text-xs text-slate-500">
+        <tr>
+          <th class="pr-4 font-medium">Contexto</th>
+          <th class="pr-4 text-right font-medium">Particiones</th>
+          <th class="pr-4 text-right font-medium">Filas con alguna anomalía</th>
+          <th class="text-right font-medium">Anomalías globales que detecta</th>
+        </tr>
+      </thead>
+      <tbody class="text-slate-700">
+        @for (c of resumenContextos(); track $index) {
+          <tr class="border-t border-slate-100">
+            <td class="pr-4 font-medium">{{ c.nombre }}</td>
+            <td class="pr-4 text-right">{{ c.numParticiones }}</td>
+            <td class="pr-4 text-right">
+              {{ c.filasAfectadas }}
+              <span class="text-xs text-slate-500">({{ porcentaje(c.filasAfectadas) }} %)</span>
+            </td>
+            <td class="text-right">
+              {{ c.anomaliasGlobalesVistas }} de {{ resultado().numAnomalias }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <h3 class="mb-2 text-sm font-semibold text-slate-800">Comparación de particiones</h3>
+    <table class="text-sm">
+      <thead class="text-left text-xs text-slate-500">
+        <tr>
+          <th class="pr-4 font-medium">Contexto / Partición</th>
+          <th class="pr-4 text-right font-medium">Columnas</th>
+          <th
+            class="pr-4 text-right font-medium"
+            title="Columnas constantes que no se le han pasado al bosque"
+          >
+            Ignoradas
+          </th>
+          <th class="pr-4 text-right font-medium">Peso</th>
+          <th class="pr-4 text-right font-medium">Anomalías</th>
+          <th class="pr-4 text-right font-medium">Score medio</th>
+          <th class="pr-4 text-right font-medium">Máx.</th>
+          <th class="text-right font-medium">Semilla</th>
+        </tr>
+      </thead>
+      <tbody class="text-slate-700">
+        @for (p of resultado().particiones; track $index) {
+          <tr class="border-t border-slate-100">
+            <td class="pr-4">
+              <span class="text-slate-500">{{ p.contexto }} /</span> {{ p.particion }}
+            </td>
+            <td class="pr-4 text-right">{{ p.numColumnas }}</td>
+            <td class="pr-4 text-right" [title]="p.ignoradas.join(', ')">
+              {{ p.ignoradas.length || '' }}
+            </td>
+            <td class="pr-4 text-right">{{ p.peso }}</td>
+            <td class="pr-4 text-right">
+              {{ p.numAnomalias }}
+              <span class="text-xs text-slate-500">({{ porcentaje(p.numAnomalias) }} %)</span>
+            </td>
+            <td class="pr-4 text-right font-mono">{{ p.scoreMedio.toFixed(3) }}</td>
+            <td class="pr-4 text-right font-mono">{{ p.scoreMaximo.toFixed(3) }}</td>
+            <td class="text-right font-mono text-xs text-slate-500">{{ p.semilla }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

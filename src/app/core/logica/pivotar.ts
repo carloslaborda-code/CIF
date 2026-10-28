@@ -23,6 +23,12 @@ export interface ParametrosColumnas {
   valor: string;
   /** Tipo de dato (electricidad, agua...). Se usa al fusionar (fusionar.ts). */
   tipo: string;
+  /**
+   * Nombre legible del sensor (en los CSV de la UA, el aulario o edificio).
+   * Solo se usa para filtrar y para enseñarlo junto al id. Es opcional: si se
+   * deja en blanco, no se lee.
+   */
+  alias: string;
 }
 
 /** Valores por defecto del formulario. */
@@ -31,22 +37,25 @@ export const PARAMETROS_POR_DEFECTO: ParametrosColumnas = {
   id: 'uid',
   valor: 'value',
   tipo: 'name',
+  alias: 'alias',
 };
 
 /**
  * Columnas de nombres que no nos interesan. "names" en concreto lleva un JSON
  * enorme en cada fila, así que no se guardan en memoria (ver leer-csv.ts).
  */
-export const COLUMNAS_IGNORADAS = ['alias', 'description', 'nombre_interno', 'names'];
+export const COLUMNAS_IGNORADAS = ['description', 'nombre_interno', 'names'];
 
 /** Una medida suelta, tal y como viene en una fila del CSV de entrada. */
 export interface Lectura {
   timestamp: string;
   id: string;
-  // El valor lo dejamos como texto. Hasta el paso 3 no hace falta que sea número,
+  // El valor lo dejamos como texto. Hasta el CIF (paso 4) no hace falta que sea número,
   // y así el CSV que descargamos sale igual que venía.
   valor: string;
   tipo: string;
+  /** '' si no se lee la columna alias o la fila no la trae. */
+  alias: string;
 }
 
 /** Una fila del resultado: un timestamp y un valor por cada id ('' si falta). */
@@ -70,12 +79,12 @@ export interface TablaPivotada {
  * Devuelve un mensaje de error, o null si todo está bien.
  */
 export function validarParametros(p: ParametrosColumnas): string | null {
+  // Ningún campo del formulario puede quedarse en blanco, salvo el alias, que es opcional.
+  if ([p.timestamp, p.id, p.valor, p.tipo].some((n) => n.trim() === '')) {
+    return 'Rellena todos los nombres de columna (el de aulario es opcional).';
+  }
   const nombres = nombresDeColumnas(p).map((n) => n.trim());
 
-  // Ningún campo del formulario puede quedarse en blanco.
-  if (nombres.some((n) => n === '')) {
-    return 'Rellena todos los nombres de columna.';
-  }
   // Si dos campos apuntan a la misma columna, algo está mal puesto.
   // El Set quita repetidos, así que si mide menos que la lista es que había alguno.
   if (new Set(nombres).size !== nombres.length) {
@@ -89,9 +98,13 @@ export function validarParametros(p: ParametrosColumnas): string | null {
   return null;
 }
 
-/** Lista con los nombres de todas las columnas de los parámetros. */
+/** Lista con los nombres de todas las columnas de los parámetros (el alias solo si está puesto). */
 export function nombresDeColumnas(p: ParametrosColumnas): string[] {
-  return [p.timestamp, p.id, p.valor, p.tipo];
+  const nombres = [p.timestamp, p.id, p.valor, p.tipo];
+  if (p.alias.trim() !== '') {
+    nombres.push(p.alias);
+  }
+  return nombres;
 }
 
 /** Devuelve las columnas de los parámetros que no están en la cabecera del CSV. */
@@ -112,13 +125,14 @@ export function extraerLectura(
   const id = (fila[p.id] ?? '').trim();
   const valor = (fila[p.valor] ?? '').trim();
   const tipo = (fila[p.tipo] ?? '').trim();
+  const alias = p.alias === '' ? '' : (fila[p.alias] ?? '').trim();
 
   // Sin timestamp no sabemos en qué fila ponerla y sin id no sabemos en qué columna.
   // El valor vacío sí se acepta: simplemente quedará un hueco en la tabla.
   if (timestamp === '' || id === '') {
     return null;
   }
-  return { timestamp, id, valor, tipo };
+  return { timestamp, id, valor, tipo, alias };
 }
 
 /**

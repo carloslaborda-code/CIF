@@ -1,0 +1,84 @@
+<!-- Una lista por campo: tipo, aulario y sensor -->
+<div class="grid gap-4 lg:grid-cols-3">
+  @for (c of campos; track c.campo) {
+    <div class="rounded border border-slate-200 p-3 space-y-2">
+      <div class="flex items-baseline justify-between">
+        <h3 class="text-sm font-semibold text-slate-800">{{ c.titulo }}</h3>
+        <span class="text-xs text-slate-500"
+          >{{ seleccion()[c.campo].size }} de {{ opciones()[c.campo].length }}</span
+        >
+      </div>
+      <!-- En la lista de sensores también busca por alias -->
+      <input
+        [ngModel]="busqueda()[c.campo]"
+        (ngModelChange)="buscar(c.campo, $event)"
+        placeholder="Buscar…"
+        class="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+      />
+      <div class="flex gap-2">
+        <button
+          type="button"
+          (click)="marcarVisibles(c.campo, true)"
+          class="rounded bg-white px-2 py-0.5 text-xs text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+        >
+          Marcar las que se ven
+        </button>
+        <button
+          type="button"
+          (click)="marcarVisibles(c.campo, false)"
+          class="rounded bg-white px-2 py-0.5 text-xs text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+        >
+          Desmarcar las que se ven
+        </button>
+      </div>
+      <!-- Caja con scroll: puede haber decenas de sensores -->
+      <div class="max-h-64 overflow-auto">
+        @for (o of visibles(c.campo); track o.valor) {
+          <label class="flex items-start gap-2 py-0.5 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              class="mt-0.5"
+              [checked]="seleccion()[c.campo].has(o.valor)"
+              (change)="alternar(c.campo, o.valor)"
+            />
+            <span class="flex-1">
+              <span class="font-mono">{{ o.valor === '' ? '(vacío)' : o.valor }}</span>
+              @if (o.detalle) {
+                <span class="text-slate-500"> · {{ o.detalle }}</span>
+              }
+            </span>
+            <span class="text-slate-400">{{ o.lecturas }}</span>
+          </label>
+        }
+      </div>
+    </div>
+  }
+</div>
+
+<!-- Resumen de lo que queda y botón para aplicar -->
+<div class="flex flex-wrap items-center gap-3 text-sm">
+  <p class="text-slate-700">
+    Quedan <strong>{{ resumen().lecturas }}</strong> de {{ lecturas().length }} lecturas ·
+    <strong>{{ resumen().sensores }}</strong> sensor(es)
+  </p>
+  @if (hayCambios()) {
+    <span class="text-xs text-amber-700">Hay cambios sin aplicar</span>
+  }
+  <div class="ml-auto flex gap-2">
+    <button
+      type="button"
+      (click)="marcarTodo()"
+      class="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+    >
+      Marcar todo
+    </button>
+    <button
+      type="button"
+      (click)="aplicar.emit(filtroMarcado())"
+      [disabled]="!hayCambios() || resumen().lecturas === 0"
+      class="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      Aplicar filtros
+    </button>
+  </div>
+</div>

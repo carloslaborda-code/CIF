@@ -1,0 +1,180 @@
+<!-- Botones para crear contextos -->
+<div class="flex flex-wrap gap-2">
+  <button
+    type="button"
+    (click)="agregarContexto()"
+    class="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+  >
+    + Contexto vacío
+  </button>
+  <!-- Con CSV en formato largo hace una partición por tipo; con uno ya pivotado, por prefijo -->
+  <button
+    type="button"
+    (click)="agregarContextoPorTipo()"
+    class="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+  >
+    + Contexto automático {{ tipos().length > 0 ? 'por tipo' : 'por prefijo' }}
+  </button>
+</div>
+
+@if (contextos().length === 0) {
+  <p class="text-sm text-slate-500">
+    Todavía no hay contextos. Un contexto es un punto de vista (por ejemplo "por tipo de medida" o
+    "por zona") y sus particiones son grupos de columnas dentro de ese punto de vista.
+  </p>
+}
+
+<!-- Un recuadro por contexto -->
+@for (contexto of contextos(); track contexto) {
+  <div class="rounded border border-slate-200 p-4 space-y-3">
+    <div class="flex flex-wrap items-end gap-3">
+      <label class="text-sm text-slate-700">
+        Contexto
+        <input
+          [(ngModel)]="contexto.nombre"
+          class="mt-1 block w-56 rounded border border-slate-300 px-2 py-1 font-medium"
+        />
+      </label>
+      <p class="text-xs text-slate-500 pb-1.5">
+        {{ contexto.particiones.length }} partición(es) · {{ sinUsar(contexto) }} de
+        {{ columnas().length }} columnas sin usar
+      </p>
+      <div class="ml-auto flex gap-2">
+        <button
+          type="button"
+          (click)="agregarParticion(contexto)"
+          class="rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          + Partición
+        </button>
+        <button
+          type="button"
+          (click)="quitarContexto(contexto)"
+          class="rounded border border-red-200 bg-white px-3 py-1 text-sm text-red-700 hover:bg-red-50"
+        >
+          Quitar contexto
+        </button>
+      </div>
+    </div>
+
+    <!-- Una fila por partición: nombre, peso, columnas -->
+    <table class="w-full text-sm">
+      <thead class="text-left text-xs text-slate-500">
+        <tr>
+          <th class="pr-3 font-medium">Partición</th>
+          <th class="pr-3 font-medium">Peso (0-1)</th>
+          <th class="pr-3 font-medium">Columnas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (particion of contexto.particiones; track particion) {
+          <tr class="border-t border-slate-100 align-top">
+            <td class="py-1 pr-3">
+              <input
+                [(ngModel)]="particion.nombre"
+                class="w-40 rounded border border-slate-300 px-2 py-1"
+              />
+            </td>
+            <td class="py-1 pr-3">
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.1"
+                [(ngModel)]="particion.peso"
+                class="w-20 rounded border border-slate-300 px-2 py-1"
+              />
+            </td>
+            <td class="py-1 pr-3">
+              <!-- Muestra las primeras columnas y abre el selector al pulsar -->
+              <button
+                type="button"
+                (click)="abrir(particion)"
+                [class]="
+                  editando() === particion
+                    ? 'rounded bg-blue-600 px-3 py-1 text-white'
+                    : 'rounded bg-slate-100 px-3 py-1 text-slate-700 hover:bg-slate-200'
+                "
+              >
+                {{ particion.columnas.length }} columna(s)
+                {{ editando() === particion ? '▲' : '▼' }}
+              </button>
+              @if (particion.columnas.length > 0 && editando() !== particion) {
+                <span class="ml-2 font-mono text-xs text-slate-500">
+                  {{ particion.columnas.slice(0, 3).join(', ')
+                  }}{{ particion.columnas.length > 3 ? '…' : '' }}
+                </span>
+              }
+            </td>
+            <td class="py-1 text-right">
+              <button
+                type="button"
+                (click)="quitarParticion(contexto, particion)"
+                class="text-xs text-red-700 hover:underline"
+              >
+                Quitar
+              </button>
+            </td>
+          </tr>
+
+          <!-- Selector de columnas de la partición abierta -->
+          @if (editando() === particion) {
+            <tr>
+              <td colspan="4" class="pb-3">
+                <div class="rounded border border-blue-200 bg-blue-50/40 p-3 space-y-2">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <!-- Escribe "Z1", "pres", etc. y marca de golpe todas las que coinciden -->
+                    <input
+                      [ngModel]="filtro()"
+                      (ngModelChange)="filtro.set($event)"
+                      placeholder="Buscar columnas o aulario (p. ej. Z1, Aulario…)"
+                      class="w-64 rounded border border-slate-300 px-2 py-1"
+                    />
+                    <span class="text-xs text-slate-500"
+                      >{{ columnasFiltradas().length }} de {{ columnas().length }}</span
+                    >
+                    <button
+                      type="button"
+                      (click)="marcarFiltradas(particion, true)"
+                      class="rounded bg-white px-2 py-1 text-xs text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+                    >
+                      Marcar las que se ven
+                    </button>
+                    <button
+                      type="button"
+                      (click)="marcarFiltradas(particion, false)"
+                      class="rounded bg-white px-2 py-1 text-xs text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+                    >
+                      Desmarcar las que se ven
+                    </button>
+                  </div>
+                  <!-- Caja con scroll: la tabla fusionada puede tener cientos de columnas -->
+                  <div
+                    class="grid max-h-64 grid-cols-1 gap-x-4 overflow-auto sm:grid-cols-2 lg:grid-cols-3"
+                  >
+                    @for (columna of columnasFiltradas(); track columna) {
+                      <label
+                        class="flex items-center gap-2 py-0.5 font-mono text-xs text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          [checked]="estaMarcada(particion, columna)"
+                          (change)="alternar(particion, columna)"
+                        />
+                        {{ columna }}
+                        @if (etiquetas()[columna]; as etiqueta) {
+                          <span class="font-sans text-slate-500">· {{ etiqueta }}</span>
+                        }
+                      </label>
+                    }
+                  </div>
+                </div>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+}

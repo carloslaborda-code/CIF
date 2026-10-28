@@ -1,11 +1,10 @@
 /**
  * Aplica el Isolation Forest de Emilia Rouanet (core/lib/isolation-forest)
- * a la tabla fusionada del paso 2.
+ * a la tabla fusionada del paso 2. Lo usa cif.ts, tanto para el IF global
+ * como para el de cada partición.
  *
- * El flujo es:
- *   - se convierte la tabla (texto) en puntos numéricos,
- *   - se marca como anomalía cada fila con score mayor que el umbral,
- *   - se resume el resultado y se exporta a CSV.
+ * Aquí están los parámetros, el paso de la tabla (texto) a puntos numéricos
+ * y el entrenamiento con semilla.
  *
  * Cada fila de la tabla (un timestamp) es un punto, y cada columna tipo_id
  * es una dimensión de ese punto. Lo que se busca son los momentos raros
@@ -13,6 +12,7 @@
  */
 import { iForest } from '../lib/isolation-forest';
 import type { TablaPivotada } from './pivotar';
+import { conSemilla, semillaAleatoria, validarSemilla } from './semilla';
 
 // ---------------------------------------------------------------------------
 // Parámetros
@@ -25,6 +25,15 @@ export interface ParametrosIsolationForest {
   umbral: number;
   /** Filas con las que se entrena cada árbol (si hay menos, se usan todas). */
   tamanoMuestra: number;
+  /** Si es true se usa `semilla`; si no, se genera una al azar en cada ejecución. */
+  semillaFija: boolean;
+  /** Semilla del generador aleatorio: misma semilla => mismo resultado. */
+  semilla: number;
+  /**
+   * Si es true, las columnas que valen lo mismo en todas las filas no se le pasan
+   * al bosque (ver columnasConstantes en cif.ts y el desplegable de la página).
+   */
+  quitarConstantes: boolean;
 }
 
 /** Valores del artículo "Contextual Isolation Forests". */
@@ -33,6 +42,9 @@ export const PARAMETROS_IF_POR_DEFECTO: ParametrosIsolationForest = {
   numArboles: 10,
   umbral: 0.7,
   tamanoMuestra: 256,
+  semillaFija: false,
+  semilla: 42,
+  quitarConstantes: true,
 };
 
 /** Comprueba los parámetros. Devuelve un mensaje de error, o null si están bien. */
@@ -53,32 +65,37 @@ export function validarParametrosIF(p: ParametrosIsolationForest): string | null
   if (!esEntero(p.tamanoMuestra) || p.tamanoMuestra < 2) {
     return 'El tamaño de muestra debe ser un entero de al menos 2.';
   }
+  // La semilla escrita solo importa si está fija; si no, se genera sola.
+  if (p.semillaFija) {
+    return validarSemilla(p.semilla);
+  }
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Uso con la tabla fusionada (paso 2)
-// ---------------------------------------------------------------------------
-
-/** Resultado de una fila: su timestamp, su score y si es anomalía. */
-export interface FilaScore {
-  timestamp: string;
-  score: number;
-  anomalia: boolean;
+/** Semilla que toca usar en una ejecución: la fija, o una nueva al azar. */
+export function elegirSemilla(p: ParametrosIsolationForest): number {
+  return p.semillaFija ? p.semilla : semillaAleatoria();
 }
 
-// Resultado de la aplicación del Isolation Forest en la pantalla del paso 3.
-export interface ResultadoIsolationForest {
-  /** Una fila por timestamp, en el mismo orden que la tabla. */
-  filas: FilaScore[];
-  numAnomalias: number;
-  scoreMinimo: number;
-  scoreMedio: number;
-  scoreMaximo: number;
-  /** Filas que entran en la muestra de cada árbol (puede ser menor que el pedido). */
-  tamanoMuestra: number;
-  /** Celdas vacías o no numéricas que se han tratado como 0. */
-  celdasNoNumericas: number;
+/**
+ * Entrena el bosque de Emilia con los puntos y devuelve el score de cada uno,
+ * en el mismo orden. Todo lo aleatorio sale de la semilla (ver semilla.ts).
+ *
+ * Al bosque se le pasa como muestra min(tamanoMuestra, nº de puntos), igual
+ * que en el IF original: su score normaliza con c(tamaño de muestra), y si le
+ * pidiéramos 256 con 47 filas los scores saldrían más bajos de lo que tocan.
+ */
+export function puntuarConSemilla(
+  puntos: number[][],
+  p: ParametrosIsolationForest,
+  semilla: number,
+): number[] {
+  const muestra = Math.min(p.tamanoMuestra, puntos.length);
+  return conSemilla(semilla, () => {
+    const bosque = new iForest(p.numArboles, muestra);
+    bosque.fit(puntos);
+    return bosque.calculateScores(puntos);
+  });
 }
 
 /**
@@ -86,7 +103,10 @@ export interface ResultadoIsolationForest {
  * una columna = una característica. Las celdas vacías o que no son números
  * se tratan como 0 y se cuentan.
  */
-export function tablaAPuntos(tabla: TablaPivotada): { puntos: number[][]; celdasNoNumericas: number } {
+export function tablaAPuntos(tabla: TablaPivotada): {
+  puntos: number[][];
+  celdasNoNumericas: number;
+} {
   let celdasNoNumericas = 0;
   const puntos = tabla.filas.map((fila) =>
     fila.valores.map((texto) => {
@@ -101,73 +121,4 @@ export function tablaAPuntos(tabla: TablaPivotada): { puntos: number[][]; celdas
     }),
   );
   return { puntos, celdasNoNumericas };
-}
-
-/** Aplica el Isolation Forest de Emilia Rouanet a una tabla y resume el resultado. */
-export function ejecutarIsolationForest(
-  tabla: TablaPivotada,
-  p: ParametrosIsolationForest,
-): ResultadoIsolationForest {
-  if (tabla.filas.length < 2) {
-    throw new Error('Hacen falta al menos 2 filas para el Isolation Forest.');
-  }
-
-  const { puntos, celdasNoNumericas } = tablaAPuntos(tabla);
-
-  // se crea el bosque, se entrena con los puntos
-  // y se calcula el score de esos mismos puntos.
-  const bosque = new iForest(p.numArboles, p.tamanoMuestra);
-  bosque.fit(puntos);
-  const scores = bosque.calculateScores(puntos);
-
-  // scores[i] es el de la fila i, porque la librería respeta el orden de entrada.
-  const filas = tabla.filas.map((fila, i) => ({
-    timestamp: fila.timestamp,
-    score: scores[i],
-    anomalia: scores[i] > p.umbral,
-  }));
-
-  // Mínimo, media y máximo con un bucle (Math.min(...scores) falla con muchas filas).
-  let scoreMinimo = Infinity;
-  let scoreMaximo = -Infinity;
-  let suma = 0;
-  for (const score of scores) {
-    scoreMinimo = Math.min(scoreMinimo, score);
-    scoreMaximo = Math.max(scoreMaximo, score);
-    suma += score;
-  }
-
-  return {
-    filas,
-    numAnomalias: filas.filter((f) => f.anomalia).length,
-    scoreMinimo,
-    scoreMedio: suma / scores.length,
-    scoreMaximo,
-    // Si la tabla tiene menos filas que la muestra pedida, se usan todas.
-    // Lo devolvemos para que en pantalla se vea el número real.
-    tamanoMuestra: Math.min(p.tamanoMuestra, puntos.length),
-    celdasNoNumericas,
-  };
-}
-
-/** Las n filas con score más alto, de mayor a menor. */
-export function filasConMasScore(filas: FilaScore[], n: number): FilaScore[] {
-  // Copiamos con [...filas] antes de ordenar porque sort() cambia el array original,
-  // y el original tiene que seguir en orden de timestamp para el CSV.
-  return [...filas].sort((a, b) => b.score - a.score).slice(0, n);
-}
-
-/** CSV con las columnas timestamp, score, anomalia (1 o 0). */
-// Este CSV se hace a mano y no con PapaParse porque son solo tres columnas.
-export function scoresACsv(filas: FilaScore[]): string {
-  // Entre comillas si el texto lleva comas, comillas o saltos de línea.
-  // Las comillas de dentro se duplican, que es como lo marca el formato CSV.
-  const celda = (texto: string) => (/[",\r\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto);
-
-  const lineas = ['timestamp,score,anomalia'];
-  for (const f of filas) {
-    lineas.push(`${celda(f.timestamp)},${f.score},${f.anomalia ? 1 : 0}`);
-  }
-  // \r\n para que Excel en Windows lo abra bien.
-  return lineas.join('\r\n');
 }
