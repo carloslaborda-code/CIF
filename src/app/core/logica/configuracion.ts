@@ -5,10 +5,19 @@
  *
  * Se descarga desde la página y se puede volver a cargar en ella.
  */
+import { CORTES_POR_DEFECTO, CortesClasificacion, validarCortes } from './clasificar';
 import type { Contexto } from './contextos';
+import { ESTIMACION_POR_DEFECTO, ParametrosEstimacion, validarEstimacion } from './estimar';
 import { CampoFiltro, FiltroLecturas, SIN_FILTRO } from './filtrar';
 import { ModoRelleno, OPCIONES_RELLENO } from './fusionar';
 import type { ParametrosColumnas } from './pivotar';
+import {
+  OPCIONES_EXTRACCION,
+  Operacion,
+  Preparacion,
+  SIN_PREPARACION,
+  validarDiccionario,
+} from './preparar';
 import { validarSemilla } from './semilla';
 
 /** Sube este número si cambia el formato, para poder reconocer ficheros antiguos. */
@@ -26,6 +35,12 @@ export interface ConfiguracionCif {
   columnas: ParametrosColumnas | null;
   /** Filtro de lecturas por tipo, sensor y aulario (solo formato largo). */
   filtro: FiltroLecturas;
+  /**
+   * Procesado de características (3.1.1) y diccionario de la codificación (3.1.2).
+   * Al guardar, el diccionario es el que salió de la tabla (el de entrada más los
+   * valores nuevos), así otros datos se codifican con los mismos números.
+   */
+  preparacion: Preparacion;
   relleno: { modo: ModoRelleno; valor: number };
   parametros: {
     numArboles: number;
@@ -36,6 +51,10 @@ export interface ConfiguracionCif {
   /** Semilla usada. null si se guardó antes de ejecutar y sin semilla fija. */
   semilla: number | null;
   contextos: Contexto[];
+  /** Ajustes de la estimación de hiperparámetros (con la semilla, basta para repetirla). */
+  estimacion: ParametrosEstimacion;
+  /** Cortes de RI e II para clasificar en grave, límite o normal. */
+  cortes: CortesClasificacion;
 }
 
 /** Texto JSON (con sangría para que se pueda leer y editar a mano). */
@@ -132,6 +151,49 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     }
   }
 
+  // La preparación se añadió después. Si falta, no se procesa nada (así se
+  // repiten igual los resultados de antes), aunque lo que es texto se codifica.
+  const preparacion: Preparacion = {
+    operaciones: [...SIN_PREPARACION.operaciones],
+    diccionario: { ...SIN_PREPARACION.diccionario },
+  };
+  if (typeof d.preparacion === 'object' && d.preparacion !== null) {
+    const pr = d.preparacion;
+    if (!Array.isArray(pr.operaciones)) {
+      throw new Error('La preparación debe traer una lista de operaciones.');
+    }
+    preparacion.operaciones = pr.operaciones.map(leerOperacion);
+    const diccionario = pr.diccionario ?? {};
+    const errorDiccionario = validarDiccionario(diccionario);
+    if (errorDiccionario) {
+      throw new Error(errorDiccionario);
+    }
+    preparacion.diccionario = { ...diccionario };
+  }
+
+  // La estimación y los cortes se añadieron después: si faltan, los del artículo.
+  const estimacion: ParametrosEstimacion = { ...ESTIMACION_POR_DEFECTO };
+  if (typeof d.estimacion === 'object' && d.estimacion !== null) {
+    for (const campo of Object.keys(estimacion) as (keyof ParametrosEstimacion)[]) {
+      if (typeof d.estimacion[campo] === 'number') {
+        estimacion[campo] = d.estimacion[campo];
+      }
+    }
+    const errorEstimacion = validarEstimacion(estimacion);
+    if (errorEstimacion) {
+      throw new Error(errorEstimacion);
+    }
+  }
+  const cortes: CortesClasificacion = { ...CORTES_POR_DEFECTO };
+  if (typeof d.cortes === 'object' && d.cortes !== null) {
+    if (typeof d.cortes.ri === 'number') cortes.ri = d.cortes.ri;
+    if (typeof d.cortes.ii === 'number') cortes.ii = d.cortes.ii;
+    const errorCortes = validarCortes(cortes);
+    if (errorCortes) {
+      throw new Error(errorCortes);
+    }
+  }
+
   return {
     version: d.version,
     fecha: String(d.fecha ?? ''),
@@ -139,6 +201,7 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     origen: d.origen === 'pivotado' ? 'pivotado' : 'largo',
     columnas,
     filtro,
+    preparacion,
     relleno: { modo: d.relleno.modo, valor: Number(d.relleno.valor ?? 0) },
     parametros: {
       numArboles: p.numArboles,
@@ -150,5 +213,39 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     },
     semilla: d.semilla,
     contextos,
+    estimacion,
+    cortes,
   };
+}
+
+/** Lee una operación del procesado. Lanza un Error si no es de un tipo conocido. */
+function leerOperacion(o: any, i: number): Operacion {
+  const texto = (x: unknown) => String(x ?? '');
+  switch (o?.tipo) {
+    case 'extraer': {
+      const ops = OPCIONES_EXTRACCION.map((x) => x.valor);
+      if (!ops.includes(o.op)) {
+        throw new Error(`Operación ${i + 1}: la extracción debe ser una de: ${ops.join(', ')}.`);
+      }
+      const op: Operacion = {
+        tipo: 'extraer',
+        origen: texto(o.origen),
+        destino: texto(o.destino),
+        op: o.op,
+      };
+      if (o.op === 'subcadena') {
+        op.inicio = Number(o.inicio);
+        op.longitud = Number(o.longitud);
+      }
+      return op;
+    }
+    case 'combinar':
+      return { tipo: 'combinar', a: texto(o.a), b: texto(o.b), destino: texto(o.destino) };
+    case 'eliminar':
+      return { tipo: 'eliminar', columna: texto(o.columna) };
+    case 'anadir':
+      return { tipo: 'anadir', destino: texto(o.destino), valor: texto(o.valor) };
+    default:
+      throw new Error(`Operación ${i + 1}: el tipo debe ser extraer, combinar, eliminar o anadir.`);
+  }
 }

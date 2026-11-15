@@ -23,6 +23,7 @@ import {
   puntuarConSemilla,
   tablaAPuntos,
 } from './aplicar-isolation-forest';
+import { clasificar, CORTES_POR_DEFECTO, CortesClasificacion } from './clasificar';
 import type { Contexto } from './contextos';
 import type { TablaPivotada } from './pivotar';
 import { derivarSemilla } from './semilla';
@@ -135,7 +136,7 @@ export function columnasConstantes(puntos: number[][]): Set<number> {
  * constantes si se ha elegido quitarlas. Si al quitarlas no quedara ninguna,
  * se dejan todas: no hay nada que distinguir y el bosque da 0.5 a todas las filas.
  */
-function columnasParaElBosque(
+export function columnasParaElBosque(
   indices: number[],
   constantes: Set<number>,
   quitar: boolean,
@@ -257,17 +258,18 @@ export function nombreParticion(r: ResultadoParticion): string {
 
 /**
  * CSV de la tabla CIF con todas las filas (en el orden de la tabla):
- * id, timestamp, anomalia, score, ii, ri, el valor de cada partición
+ * id, timestamp, anomalia, clase (grave, limite o normal), score, ii, ri, el valor de cada partición
  * (con umbral, como en pantalla) y después el score sin umbral de cada una.
  * La semilla va en el nombre del fichero y en el JSON de configuración.
  */
-export function cifACsv(r: ResultadoCif): string {
+export function cifACsv(r: ResultadoCif, cortes: CortesClasificacion = CORTES_POR_DEFECTO): string {
   const nombres = r.particiones.map(nombreParticion);
   return Papa.unparse({
     fields: [
       'id',
       'timestamp',
       'anomalia',
+      'clase',
       'score',
       'ii',
       'ri',
@@ -278,6 +280,7 @@ export function cifACsv(r: ResultadoCif): string {
       f.id,
       f.timestamp,
       f.anomalia ? 1 : 0,
+      clasificar(f, cortes),
       f.score,
       f.ii,
       f.ri,

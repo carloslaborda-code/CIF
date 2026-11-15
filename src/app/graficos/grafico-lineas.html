@@ -1,0 +1,233 @@
+<!-- Leyenda: solo hace falta si hay más de una línea -->
+@if (series().length > 1) {
+  <ul class="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
+    @for (s of series(); track s.nombre) {
+      <li class="flex items-center gap-2">
+        <span
+          class="h-0.5 w-5 rounded"
+          [style.background-color]="s.color"
+          aria-hidden="true"
+        ></span>
+        {{ s.nombre }}
+      </li>
+    }
+  </ul>
+}
+
+<!-- relative: el recuadro con los valores se coloca encima del dibujo -->
+<div class="relative">
+  <!-- tabindex="0": se puede llegar con el tabulador y moverse con las flechas -->
+  <svg
+    #svg
+    class="block w-full touch-none rounded"
+    [attr.viewBox]="'0 0 ' + ANCHO + ' ' + alto()"
+    role="img"
+    tabindex="0"
+    [attr.aria-label]="
+      descripcion() + '. Usa las flechas izquierda y derecha para recorrer los valores.'
+    "
+    (pointermove)="alMover($event)"
+    (pointerleave)="activo.set(null)"
+    (keydown)="alPulsar($event)"
+    (blur)="activo.set(null)"
+  >
+    <!-- Rejilla y marcas del eje y -->
+    @for (m of marcasY(); track m) {
+      <line
+        [attr.x1]="margen.izquierda"
+        [attr.x2]="ANCHO - margen.derecha"
+        [attr.y1]="py()(m)"
+        [attr.y2]="py()(m)"
+        stroke="var(--grafico-rejilla)"
+      />
+      <text
+        class="grafico-texto"
+        [attr.x]="margen.izquierda - 8"
+        [attr.y]="py()(m) + 4"
+        text-anchor="end"
+      >
+        {{ formatoY()(m) }}
+      </text>
+    }
+    <!-- Marcas del eje x -->
+    @for (m of marcasX(); track m) {
+      <text
+        class="grafico-texto"
+        [attr.x]="px()(m)"
+        [attr.y]="alto() - margen.abajo + 16"
+        text-anchor="middle"
+      >
+        {{ formatoX()(m) }}
+      </text>
+    }
+    <!-- Nombres de los ejes -->
+    <text
+      class="grafico-texto"
+      [attr.x]="(margen.izquierda + ANCHO - margen.derecha) / 2"
+      [attr.y]="alto() - 6"
+      text-anchor="middle"
+    >
+      {{ etiquetaX() }}
+    </text>
+    <text
+      class="grafico-texto"
+      [attr.transform]="
+        'translate(13 ' + (alto() - margen.abajo + margen.arriba) / 2 + ') rotate(-90)'
+      "
+      text-anchor="middle"
+    >
+      {{ etiquetaY() }}
+    </text>
+
+    <!-- Líneas de referencia, con su texto al lado -->
+    @for (l of lineasH(); track l.etiqueta) {
+      <line
+        [attr.x1]="margen.izquierda"
+        [attr.x2]="ANCHO - margen.derecha"
+        [attr.y1]="py()(l.valor)"
+        [attr.y2]="py()(l.valor)"
+        stroke="#334155"
+        stroke-width="1.5"
+        stroke-dasharray="6 4"
+      />
+    }
+    @for (l of lineasV(); track l.etiqueta) {
+      <line
+        [attr.x1]="px()(l.valor)"
+        [attr.x2]="px()(l.valor)"
+        [attr.y1]="margen.arriba"
+        [attr.y2]="alto() - margen.abajo"
+        stroke="#334155"
+        stroke-width="1.5"
+        stroke-dasharray="6 4"
+      />
+    }
+
+    <!-- Las series -->
+    @for (t of trazos(); track t.nombre) {
+      <path
+        [attr.d]="t.d"
+        fill="none"
+        [attr.stroke]="t.color"
+        stroke-width="2"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+      @if (conPuntos()) {
+        @for (p of t.puntos; track p.x) {
+          <circle [attr.cx]="px()(p.x)" [attr.cy]="py()(p.y)" r="3" [attr.fill]="t.color" />
+        }
+      }
+    }
+
+    <!-- Puntos destacados, con un borde blanco para que se distingan de la línea -->
+    @for (m of marcas(); track $index) {
+      <circle
+        [attr.cx]="px()(m.x)"
+        [attr.cy]="py()(m.y)"
+        r="4"
+        [attr.fill]="m.color"
+        stroke="white"
+        stroke-width="2"
+      />
+    }
+
+    <!-- Textos de las líneas de referencia: al final, para que queden encima de los datos -->
+    @for (l of lineasH(); track l.etiqueta) {
+      <text class="grafico-etiqueta" [attr.x]="margen.izquierda + 6" [attr.y]="py()(l.valor) - 6">
+        {{ l.etiqueta }}
+      </text>
+    }
+    @for (l of lineasV(); track l.etiqueta) {
+      <!-- A la derecha de la línea, o a la izquierda si no cabe -->
+      <text
+        class="grafico-etiqueta"
+        [attr.x]="px()(l.valor) + (px()(l.valor) > ANCHO * 0.7 ? -6 : 6)"
+        [attr.y]="alto() - margen.abajo - 8"
+        [attr.text-anchor]="px()(l.valor) > ANCHO * 0.7 ? 'end' : 'start'"
+      >
+        {{ l.etiqueta }}
+      </text>
+    }
+
+    <!-- Punto que se está mirando: línea vertical y un círculo en cada serie -->
+    @if (detalle(); as d) {
+      <line
+        [attr.x1]="d.posicion"
+        [attr.x2]="d.posicion"
+        [attr.y1]="margen.arriba"
+        [attr.y2]="alto() - margen.abajo"
+        stroke="var(--grafico-eje)"
+      />
+      @for (v of d.valores; track v.nombre) {
+        <circle
+          [attr.cx]="d.posicion"
+          [attr.cy]="py()(v.y)"
+          r="5"
+          [attr.fill]="v.color"
+          stroke="white"
+          stroke-width="2"
+        />
+      }
+    }
+  </svg>
+
+  <!-- Recuadro con los valores del punto. pointer-events-none para que no estorbe al ratón -->
+  @if (detalle(); as d) {
+    <div
+      class="pointer-events-none absolute top-1 z-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-md"
+      [style.left.%]="d.aLaIzquierda ? null : (d.posicion / ANCHO) * 100 + 2"
+      [style.right.%]="d.aLaIzquierda ? 100 - (d.posicion / ANCHO) * 100 + 2 : null"
+    >
+      <p class="font-medium text-slate-900">{{ formatoX()(d.x) }}</p>
+      @for (v of d.valores; track v.nombre) {
+        <p class="flex items-center gap-2 whitespace-nowrap text-slate-700">
+          <span
+            class="h-2 w-2 rounded-full"
+            [style.background-color]="v.color"
+            aria-hidden="true"
+          ></span>
+          {{ v.nombre }}: <strong class="tabular-nums">{{ formatoY()(v.y) }}</strong>
+        </p>
+      }
+    </div>
+  }
+</div>
+
+<!-- Los mismos datos en una tabla -->
+<details class="mt-2 text-sm">
+  <summary class="enlace inline-block">Ver los datos en una tabla</summary>
+  <div class="mt-2 max-h-64 overflow-auto rounded-lg border border-slate-200">
+    <table class="tabla">
+      <caption class="sr-only">
+        {{
+          descripcion()
+        }}
+      </caption>
+      <thead class="sticky top-0 bg-slate-100">
+        <tr>
+          <th scope="col">{{ etiquetaX() }}</th>
+          @for (s of series(); track s.nombre) {
+            <th scope="col" class="!text-right">{{ s.nombre }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (f of filasTabla(); track f.x) {
+          <tr>
+            <td>{{ formatoX()(f.x) }}</td>
+            @for (v of f.valores; track $index) {
+              <td class="text-right tabular-nums">{{ formatoY()(v) }}</td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  @if (xs().length > maxFilasTabla()) {
+    <p class="ayuda">
+      Se enseñan las primeras {{ maxFilasTabla() }} filas de {{ xs().length }}. Para verlas todas,
+      descarga el CSV.
+    </p>
+  }
+</details>

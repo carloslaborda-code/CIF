@@ -1,0 +1,87 @@
+@if (resultado().particiones.length === 0) {
+  <p class="aviso-info">
+    No hay contextos definidos, así que solo se ha calculado el Isolation Forest global. Vuelve al
+    paso 3 para crear contextos y particiones.
+  </p>
+} @else {
+  <div class="space-y-8">
+    <section aria-labelledby="titulo-contextos">
+      <h3 id="titulo-contextos" class="text-base font-semibold text-slate-900">Contextos</h3>
+      <p class="ayuda mb-3">Qué ve cada punto de vista, contando todas sus particiones.</p>
+      <div class="overflow-auto rounded-lg border border-slate-200">
+        <table class="tabla">
+          <thead class="bg-slate-100">
+            <tr>
+              <th scope="col">Contexto</th>
+              <th scope="col" class="!text-right">Particiones</th>
+              <th scope="col" class="!text-right">Filas con alguna anomalía</th>
+              <th scope="col" class="!text-right">Anomalías globales que detecta</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of resumenContextos(); track $index) {
+              <tr>
+                <th scope="row" class="!text-slate-900">{{ c.nombre }}</th>
+                <td class="text-right tabular-nums">{{ c.numParticiones }}</td>
+                <td class="text-right tabular-nums">
+                  {{ c.filasAfectadas }}
+                  <span class="text-slate-600">({{ porcentaje(c.filasAfectadas) }} %)</span>
+                </td>
+                <td class="text-right tabular-nums">
+                  {{ c.anomaliasGlobalesVistas }} de {{ resultado().numAnomalias }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="titulo-particiones">
+      <h3 id="titulo-particiones" class="text-base font-semibold text-slate-900">Particiones</h3>
+      <p class="ayuda mb-3">
+        Cada partición tiene su propio Isolation Forest, con solo sus columnas y su semilla.
+      </p>
+      <div class="overflow-auto rounded-lg border border-slate-200">
+        <table class="tabla">
+          <thead class="bg-slate-100">
+            <tr>
+              <th scope="col">Contexto / Partición</th>
+              <th scope="col" class="!text-right">Columnas</th>
+              <th scope="col" class="!text-right">
+                <abbr title="Columnas constantes que no se le han pasado al bosque">Ignoradas</abbr>
+              </th>
+              <th scope="col" class="!text-right">Peso</th>
+              <th scope="col" class="!text-right">Anomalías</th>
+              <th scope="col" class="!text-right">Score medio</th>
+              <th scope="col" class="!text-right">Score máximo</th>
+              <th scope="col" class="!text-right">Semilla</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of resultado().particiones; track $index) {
+              <tr>
+                <th scope="row" class="!text-slate-900">
+                  <span class="font-normal text-slate-600">{{ p.contexto }} /</span>
+                  {{ p.particion }}
+                </th>
+                <td class="text-right tabular-nums">{{ p.numColumnas }}</td>
+                <td class="text-right tabular-nums" [title]="p.ignoradas.join(', ')">
+                  {{ p.ignoradas.length }}
+                </td>
+                <td class="text-right tabular-nums">{{ p.peso }}</td>
+                <td class="text-right tabular-nums">
+                  {{ p.numAnomalias }}
+                  <span class="text-slate-600">({{ porcentaje(p.numAnomalias) }} %)</span>
+                </td>
+                <td class="text-right tabular-nums">{{ p.scoreMedio.toFixed(3) }}</td>
+                <td class="text-right tabular-nums">{{ p.scoreMaximo.toFixed(3) }}</td>
+                <td class="text-right tabular-nums text-slate-600">{{ p.semilla }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+}

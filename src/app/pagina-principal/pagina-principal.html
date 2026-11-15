@@ -1,515 +1,670 @@
-<!-- Página entera. Se divide en cuatro bloques: ficheros/parámetros y los pasos 1, 2 y 3.
-     Los pasos solo aparecen cuando ya hay algo que enseñar (por los @if). -->
-<main class="mx-auto max-w-6xl p-6 space-y-6">
-  <h1 class="text-2xl font-semibold text-slate-800">CIF</h1>
+<!-- Asistente de cinco pasos. Arriba, la cabecera y la barra de pasos (siempre a la vista);
+     debajo, solo el contenido del paso en el que se está. -->
 
-  <!-- Ficheros y parámetros -->
-  <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-    <!-- Cargar una configuración guardada (JSON) para repetir un caso: rellena todo el formulario -->
-    <div
-      class="flex flex-wrap items-center gap-3 rounded bg-slate-50 px-3 py-2 text-sm text-slate-700"
-    >
-      <span>¿Quieres repetir un caso?</span>
-      <!-- El input real está escondido; el label hace de botón -->
-      <label
-        class="cursor-pointer rounded border border-slate-300 bg-white px-3 py-1 font-medium hover:bg-slate-100"
-      >
-        Cargar configuración (.json)
-        <input
-          type="file"
-          accept=".json,application/json"
-          class="hidden"
-          (change)="cargarConfiguracion($event)"
-        />
-      </label>
-      @if (mensajeConfiguracion(); as m) {
-        <span [class]="m.error ? 'text-red-700' : 'text-emerald-700'">{{ m.texto }}</span>
-      }
-    </div>
+<!-- Para quien usa teclado: el primer tabulador deja saltarse la cabecera -->
+<a
+  href="#contenido"
+  class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:shadow-lg"
+>
+  Saltar al contenido
+</a>
 
-    <!-- Tipo de CSV. Al cambiarlo se quitan los resultados de antes, porque ya no corresponden -->
-    <fieldset class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-700">
-      <legend class="mb-1 font-medium">Tipo de CSV</legend>
-      <label class="flex items-center gap-2">
-        <input
-          type="radio"
-          name="origen"
-          value="largo"
-          [(ngModel)]="origen"
-          (ngModelChange)="limpiarResultados()"
-        />
-        Formato largo (se pivota y se fusiona)
-      </label>
-      <label class="flex items-center gap-2">
-        <input
-          type="radio"
-          name="origen"
-          value="pivotado"
-          [(ngModel)]="origen"
-          (ngModelChange)="limpiarResultados()"
-        />
-        Ya pivotado (va directo al Isolation Forest)
-      </label>
-    </fieldset>
-
-    <div>
-      <label class="mb-1 block text-sm font-medium text-slate-700" for="ficheros">
-        {{
-          origen === 'largo'
-            ? 'Ficheros CSV (puedes elegir varios)'
-            : 'Fichero CSV pivotado (timestamp en la primera columna)'
-        }}
-      </label>
-      <!-- multiple deja elegir varios CSV a la vez (solo en formato largo). Al cambiar la selección se llama a alElegirFicheros -->
-      <input
-        id="ficheros"
-        type="file"
-        accept=".csv,text/csv"
-        [multiple]="origen === 'largo'"
-        (change)="alElegirFicheros($event)"
-        class="block text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
-      />
-      <!-- Debajo del input: cuántos ficheros, cuánto pesan y cómo se llaman -->
-      @if (ficheros().length > 0) {
-        <p class="mt-1 text-xs text-slate-500">
-          {{ ficheros().length }} fichero(s), {{ megasTotales().toFixed(1) }} MB:
-          <!-- $last para no poner coma detrás del último nombre -->
-          @for (f of ficheros(); track f.name; let ultimo = $last) {
-            {{ f.name }}{{ ultimo ? '' : ', ' }}
-          }
-        </p>
-      }
-    </div>
-
-    <!-- Formulario de columnas. Al darle a Procesar (o a Enter) se ejecuta procesar().
-         Cada input está enlazado en los dos sentidos con [(ngModel)] a "parametros". -->
-    <form class="grid gap-4 sm:grid-cols-6" (ngSubmit)="procesar()">
-      <!-- Los nombres de columna solo hacen falta en formato largo; en el pivotado
-           la primera columna es el timestamp y el resto son datos -->
-      @if (origen === 'largo') {
-        <label class="text-sm text-slate-700">
-          Columna timestamp
-          <input
-            name="timestamp"
-            [(ngModel)]="parametros.timestamp"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <label class="text-sm text-slate-700">
-          Columna id
-          <input
-            name="id"
-            [(ngModel)]="parametros.id"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <label class="text-sm text-slate-700">
-          Columna valor
-          <input
-            name="valor"
-            [(ngModel)]="parametros.valor"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <label class="text-sm text-slate-700">
-          Columna tipo
-          <input
-            name="tipo"
-            [(ngModel)]="parametros.tipo"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <!-- Opcional: si se deja en blanco no se lee y no se puede filtrar por aulario -->
-        <label class="text-sm text-slate-700">
-          Columna aulario
-          <input
-            name="alias"
-            [(ngModel)]="parametros.alias"
-            placeholder="(opcional)"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-      }
-      <!-- Desplegable con las opciones de OPCIONES_RELLENO (fusionar.ts) -->
-      <label class="text-sm text-slate-700">
-        Rellenar huecos con
-        <select
-          name="relleno"
-          [(ngModel)]="relleno"
-          class="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1"
-        >
-          @for (opcion of opcionesRelleno; track opcion.valor) {
-            <option [value]="opcion.valor">{{ opcion.texto }}</option>
-          }
-        </select>
-      </label>
-      <!-- El valor solo se usa con "Valor fijo". Los min/max son ayuda visual;
-           la comprobación de verdad la hace validarRelleno -->
-      @if (relleno === 'fijo') {
-        <label class="text-sm text-slate-700">
-          Valor de relleno
-          <input
-            name="valorRelleno"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            [(ngModel)]="valorRelleno"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-      }
-
-      <div class="sm:col-span-6">
-        <!-- Desactivado si no hay ficheros o si ya está procesando (para no lanzarlo dos veces) -->
-        <button
-          type="submit"
-          [disabled]="ficheros().length === 0 || procesando()"
-          class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {{ procesando() ? 'Procesando…' : 'Procesar' }}
-        </button>
-      </div>
-    </form>
-
-    <!-- Recuadro rojo con el error de los pasos 1 y 2, si lo hay -->
-    @if (error(); as mensaje) {
-      <p class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-        {{ mensaje }}
-      </p>
-    }
-  </section>
-
-  <!-- Filtro de lecturas (solo formato largo): sale en cuanto se ha leído el CSV,
-       aunque el filtro deje la tabla vacía, para poder corregirlo -->
-  @if (lecturas(); as todas) {
-    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+<header class="border-b border-slate-200 bg-white md:sticky md:top-0 md:z-30">
+  <div class="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 class="font-semibold text-slate-800">
-          Filtrar lecturas
-          <span
-            class="ml-2 text-xs font-normal"
-            [class]="esSinFiltro(filtro()) ? 'text-slate-500' : 'text-blue-700'"
-          >
-            {{ esSinFiltro(filtro()) ? '(sin filtro)' : '(filtro activo)' }}
-          </span>
-        </h2>
-        <p class="text-sm text-slate-500">
-          Elige qué tipos, aularios y sensores entran. Al aplicar se vuelve a pivotar sin leer otra
-          vez el CSV.
+        <p class="text-lg font-semibold leading-tight text-slate-900">CIF</p>
+        <p class="text-sm text-slate-600">
+          Contextual Isolation Forest · anomalías en sensores, por contexto
         </p>
       </div>
-      <app-panel-filtros
-        [lecturas]="todas"
-        [filtro]="filtro()"
-        (aplicar)="aplicarFiltros($event)"
-      />
-    </section>
-  }
-
-  <!-- Paso 1: pivotado -->
-  <!-- "as t" guarda la tabla en t para no tener que llamar a tabla() todo el rato -->
-  @if (tabla(); as t) {
-    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="font-semibold text-slate-800">1. Pivotado</h2>
-          <p class="text-sm text-slate-700">
-            <strong>{{ t.filas.length }}</strong> filas (timestamps) ·
-            <strong>{{ t.ids.length }}</strong> columnas de ids
-            <span class="text-slate-500">(+ la columna {{ t.columnaTimestamp }})</span>
-          </p>
-        </div>
-        <!-- type="button" para que no cuente como submit de ningún formulario -->
-        <button
-          type="button"
-          (click)="descargar(t, '1_pivotado.csv')"
-          class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+      <div class="flex flex-wrap gap-2">
+        <!-- El input real está escondido (sr-only) pero sigue recibiendo el foco;
+             el label hace de botón y enseña el foco con focus-within -->
+        <label
+          class="btn-secundario focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
         >
-          Descargar 1_pivotado.csv
-        </button>
-      </div>
-      <app-vista-previa [tabla]="t" />
-    </section>
-  }
-
-  <!-- Paso 2: fusionado por tipo -->
-  @if (fusion(); as f) {
-    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="space-y-2">
-          <h2 class="font-semibold text-slate-800">
-            {{
-              origenProcesado() === 'largo' ? '2. Fusionado por tipo' : '2. CSV pivotado cargado'
-            }}
-          </h2>
-          <!-- Resumen general de la tabla fusionada (un CSV ya pivotado no tiene tipos) -->
-          <p class="text-sm text-slate-700">
-            @if (f.tipos.length > 0) {
-              <strong>{{ f.tipos.length }}</strong> tipo(s) ·
-            }
-            <strong>{{ f.filas.length }}</strong> filas ·
-            <strong>{{ f.ids.length }}</strong> columnas
-            <span class="text-slate-500">(+ la columna {{ f.columnaTimestamp }})</span> ·
-            <strong>{{ f.huecosRellenados }}</strong> de {{ f.huecos }} huecos rellenados
-          </p>
-          <!-- Una línea por cada tipo con sus columnas y sus timestamps (sale de ResumenTipo) -->
-          @if (f.tipos.length > 0) {
-            <table class="text-sm">
-              <thead class="text-left text-slate-500">
-                <tr>
-                  <th class="pr-6 font-medium">Tipo</th>
-                  <th class="pr-6 text-right font-medium">Columnas</th>
-                  <th class="text-right font-medium">Timestamps</th>
-                </tr>
-              </thead>
-              <tbody class="text-slate-700">
-                @for (tipo of f.tipos; track tipo.tipo) {
-                  <tr>
-                    <td class="pr-6 font-mono">{{ tipo.tipo }}</td>
-                    <td class="pr-6 text-right">{{ tipo.columnas }}</td>
-                    <td class="text-right">{{ tipo.filas }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          }
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            (click)="descargar(f, '2_fusionado.csv')"
-            class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-          >
-            Descargar 2_fusionado.csv
-          </button>
-          <!-- Qué es cada columna (tipo, uid y aulario). Solo con CSV largo: el pivotado no trae esa información -->
-          @if (lecturas()) {
-            <button
-              type="button"
-              (click)="descargarColumnas(f)"
-              class="rounded border border-emerald-600 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-            >
-              Descargar columnas.csv
-            </button>
-          }
-        </div>
-      </div>
-      <!-- La misma vista previa que en el paso 1 (TablaFusionada extiende TablaPivotada) -->
-      <app-vista-previa [tabla]="f" />
-    </section>
-  }
-
-  <!-- Paso 3: contextos y particiones (grupos de columnas) -->
-  <!-- Los pasos 3 y 4 solo aparecen cuando ya existe la tabla del paso 2, porque es la que se analiza -->
-  @if (fusion(); as f) {
-    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 class="font-semibold text-slate-800">3. Contextos y particiones</h2>
-          <p class="text-sm text-slate-500">
-            Cada partición es un grupo de columnas sobre el que se ejecuta un Isolation Forest
-            aparte.
-          </p>
-        </div>
+          Cargar configuración
+          <input
+            type="file"
+            accept=".json,application/json"
+            class="sr-only"
+            (change)="cargarConfiguracion($event)"
+          />
+        </label>
         <!-- Guarda lo que hay en el formulario (sin ejecutar); la semilla solo si está fija -->
         <button
           type="button"
+          class="btn-secundario"
+          [disabled]="!fusion()"
+          [attr.title]="fusion() ? null : 'Lee antes unos datos'"
           (click)="descargarConfiguracion(null)"
-          class="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          Guardar configuración (.json)
+          Guardar configuración
         </button>
       </div>
-      <!-- [(contextos)]: el editor cambia la lista y nos la devuelve -->
-      <app-editor-contextos
-        [columnas]="f.ids"
-        [tipos]="f.tipos"
-        [etiquetas]="etiquetas()"
-        [(contextos)]="contextos"
-      />
-    </section>
+    </div>
+    <app-barra-pasos [pasos]="listaPasos()" [actual]="paso()" (ir)="irA($event)" />
+  </div>
+</header>
 
-    <!-- Paso 4: CIF = IF global + IF por partición + RI e II -->
-    <section class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-      <div>
-        <h2 class="font-semibold text-slate-800">4. Contextual Isolation Forest</h2>
-        <p class="text-sm text-slate-500">
-          Un Isolation Forest sobre la tabla entera (IF Sc) y otro por cada partición, con los
-          mismos parámetros.
-        </p>
-      </div>
+<!-- Lo que se le dice al lector de pantalla cuando pasa algo; no se ve -->
+<p class="sr-only" role="status" aria-live="polite">{{ anuncio() }}</p>
 
-      <!-- Parámetros del bosque. Los min/max/step del input son solo ayuda visual;
-           la comprobación de verdad la hace validarParametrosIF -->
-      <form class="grid gap-4 sm:grid-cols-4" (ngSubmit)="ejecutarCifPaso()">
-        <label class="text-sm text-slate-700">
-          Número de árboles
-          <input
-            name="numArboles"
-            type="number"
-            min="1"
-            step="1"
-            [(ngModel)]="parametrosIF.numArboles"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <label class="text-sm text-slate-700">
-          Umbral
-          <input
-            name="umbral"
-            type="number"
-            min="0"
-            max="1"
-            step="0.01"
-            [(ngModel)]="parametrosIF.umbral"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <label class="text-sm text-slate-700">
-          Tamaño de muestra
-          <input
-            name="tamanoMuestra"
-            type="number"
-            min="2"
-            step="1"
-            [(ngModel)]="parametrosIF.tamanoMuestra"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1"
-          />
-        </label>
-        <!-- Semilla: si no se fija, se genera una al azar en cada ejecución (y se enseña igualmente) -->
-        <div class="text-sm text-slate-700">
-          <label class="flex items-center gap-2">
-            <input name="semillaFija" type="checkbox" [(ngModel)]="parametrosIF.semillaFija" />
-            Semilla fija
-          </label>
-          <input
-            name="semilla"
-            type="number"
-            min="0"
-            step="1"
-            [disabled]="!parametrosIF.semillaFija"
-            [(ngModel)]="parametrosIF.semilla"
-            class="mt-1 w-full rounded border border-slate-300 px-2 py-1 disabled:bg-slate-100 disabled:text-slate-400"
-          />
-        </div>
+<main id="contenido" class="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
+  @if (mensajeConfiguracion(); as m) {
+    <div
+      [class]="m.error ? 'aviso-error' : 'aviso-bien'"
+      [attr.role]="m.error ? 'alert' : 'status'"
+    >
+      <span class="flex-1">
+        <strong>{{ m.error ? 'No se ha podido cargar la configuración:' : '✓' }}</strong>
+        {{ m.texto }}
+      </span>
+      <button type="button" class="enlace shrink-0" (click)="mensajeConfiguracion.set(null)">
+        Cerrar
+      </button>
+    </div>
+  }
 
-        <!-- Opción de quitar columnas constantes. El aviso sale en ámbar si se desactiva -->
-        <div
-          class="sm:col-span-4 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-        >
-          <label class="flex items-center gap-2">
-            <input
-              name="quitarConstantes"
-              type="checkbox"
-              [(ngModel)]="parametrosIF.quitarConstantes"
-            />
-            Quitar las columnas constantes antes de cada Isolation Forest
-            <span class="text-xs text-slate-500">(recomendado)</span>
-          </label>
-          <p
-            class="mt-1 text-xs"
-            [class]="parametrosIF.quitarConstantes ? 'text-slate-500' : 'text-amber-700'"
-          >
-            Aviso: una columna que vale lo mismo en todas las filas (p. ej. un sensor apagado)
-            acerca todos los scores a 0.5, también los de las anomalías, que entonces no llegan al
-            umbral. Quitarlas no cambia qué filas son raras.
-          </p>
-        </div>
+  <!-- Título del paso. tabindex="-1": recibe el foco al cambiar de paso, pero no con el tabulador -->
+  <h1 #tituloPaso tabindex="-1" class="text-2xl font-semibold text-slate-900 outline-none">
+    <span class="text-slate-500">Paso {{ paso() }} de 5 ·</span> {{ tituloActual() }}
+  </h1>
 
-        <div class="sm:col-span-4">
-          <button
-            type="submit"
-            class="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Ejecutar CIF
+  @switch (paso()) {
+    <!-- ================================================================== -->
+    <!-- PASO 1 · DATOS                                                     -->
+    <!-- ================================================================== -->
+    @case (1) {
+      <form class="space-y-5" (ngSubmit)="procesar()">
+        <section class="tarjeta space-y-5">
+          <!-- Tipo de CSV. Al cambiarlo se quitan los resultados de antes, porque ya no corresponden -->
+          <fieldset>
+            <legend class="etiqueta">¿Cómo vienen tus datos?</legend>
+            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+              <label
+                class="flex cursor-pointer gap-3 rounded-lg border p-4 has-[:checked]:border-blue-700 has-[:checked]:bg-blue-50"
+                [class.border-slate-300]="origen !== 'largo'"
+              >
+                <input
+                  type="radio"
+                  name="origen"
+                  value="largo"
+                  class="casilla mt-0.5"
+                  [(ngModel)]="origen"
+                  (ngModelChange)="limpiarResultados()"
+                />
+                <span>
+                  <span class="block text-sm font-semibold text-slate-900"
+                    >Una fila por lectura</span
+                  >
+                  <span class="block text-sm text-slate-600">
+                    Formato largo: cada fila tiene el momento, el sensor y el valor. La herramienta
+                    lo convierte en tabla. Puedes elegir varios ficheros.
+                  </span>
+                </span>
+              </label>
+              <label
+                class="flex cursor-pointer gap-3 rounded-lg border p-4 has-[:checked]:border-blue-700 has-[:checked]:bg-blue-50"
+                [class.border-slate-300]="origen !== 'pivotado'"
+              >
+                <input
+                  type="radio"
+                  name="origen"
+                  value="pivotado"
+                  class="casilla mt-0.5"
+                  [(ngModel)]="origen"
+                  (ngModelChange)="limpiarResultados()"
+                />
+                <span>
+                  <span class="block text-sm font-semibold text-slate-900">Una tabla ya hecha</span>
+                  <span class="block text-sm text-slate-600">
+                    Ya pivotado: el momento en la primera columna y un sensor en cada una de las
+                    demás. Un solo fichero.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <!-- Zona de carga: se puede pulsar o arrastrar ficheros encima -->
+          <div>
+            <label
+              class="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
+              [class]="
+                arrastrando()
+                  ? 'border-blue-700 bg-blue-50'
+                  : 'border-slate-400 bg-slate-50 hover:bg-slate-100'
+              "
+              (dragover)="alArrastrar($event)"
+              (dragleave)="arrastrando.set(false)"
+              (drop)="alSoltar($event)"
+            >
+              <span class="text-3xl" aria-hidden="true">⬆</span>
+              <span class="text-base font-semibold text-slate-900">
+                {{
+                  origen === 'largo'
+                    ? 'Elige los ficheros CSV o arrástralos aquí'
+                    : 'Elige el fichero CSV o arrástralo aquí'
+                }}
+              </span>
+              <span class="text-sm text-slate-600">
+                Los datos no salen de tu ordenador: todo se calcula en el navegador.
+              </span>
+              <!-- multiple deja elegir varios CSV a la vez (solo en formato largo) -->
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                class="sr-only"
+                [multiple]="origen === 'largo'"
+                (change)="alElegirFicheros($event)"
+              />
+            </label>
+            <!-- Debajo: cuántos ficheros, cuánto pesan y cómo se llaman -->
+            @if (ficheros().length > 0) {
+              <div class="mt-3" aria-live="polite">
+                <p class="text-sm font-medium text-slate-800">
+                  {{ ficheros().length }}
+                  {{ ficheros().length === 1 ? 'fichero elegido' : 'ficheros elegidos' }}
+                  ({{ numero(megasTotales(), 1) }} MB):
+                </p>
+                <ul class="mt-1 flex flex-wrap gap-2">
+                  @for (f of ficheros(); track f.name) {
+                    <li class="rounded-full bg-slate-200 px-3 py-1 text-sm text-slate-800">
+                      {{ f.name }}
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </div>
+
+          <!-- Los nombres de columna solo hacen falta en formato largo; en el pivotado
+               la primera columna es el momento y el resto son datos -->
+          @if (origen === 'largo') {
+            <details class="plegable">
+              <summary>Nombres de las columnas del CSV</summary>
+              <div class="plegable-contenido">
+                <p class="text-sm text-slate-600">
+                  Ya vienen puestos los de los ficheros de la Universidad. Cámbialos solo si tu CSV
+                  usa otros.
+                </p>
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                  <label class="etiqueta">
+                    Momento
+                    <input class="campo" name="timestamp" [(ngModel)]="parametros.timestamp" />
+                  </label>
+                  <label class="etiqueta">
+                    Identificador del sensor
+                    <input class="campo" name="id" [(ngModel)]="parametros.id" />
+                  </label>
+                  <label class="etiqueta">
+                    Valor
+                    <input class="campo" name="valor" [(ngModel)]="parametros.valor" />
+                  </label>
+                  <label class="etiqueta">
+                    Tipo de medida
+                    <input class="campo" name="tipo" [(ngModel)]="parametros.tipo" />
+                  </label>
+                  <!-- Opcional: si se deja en blanco no se lee y no se puede filtrar por aulario -->
+                  <label class="etiqueta">
+                    Aulario o edificio <span class="font-normal text-slate-600">(opcional)</span>
+                    <input class="campo" name="alias" [(ngModel)]="parametros.alias" />
+                  </label>
+                </div>
+              </div>
+            </details>
+          }
+
+          @if (error(); as mensaje) {
+            <p class="aviso-error" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
+          }
+        </section>
+
+        <div class="flex flex-wrap items-center justify-end gap-3">
+          @if (procesando()) {
+            <p class="text-sm text-slate-700" role="status">
+              Leyendo los ficheros… con CSV grandes puede tardar unos segundos.
+            </p>
+          }
+          <button type="submit" class="btn-primario" [disabled]="procesando()">
+            {{ procesando() ? 'Leyendo…' : 'Leer los datos y continuar →' }}
           </button>
         </div>
       </form>
+    }
 
-      @if (errorCif(); as mensaje) {
-        <p class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {{ mensaje }}
-        </p>
+    <!-- ================================================================== -->
+    <!-- PASO 2 · PREPARAR                                                  -->
+    <!-- ================================================================== -->
+    @case (2) {
+      @if (error(); as mensaje) {
+        <p class="aviso-error" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
       }
 
-      @if (resultadoCif(); as r) {
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="space-y-1 text-sm text-slate-700">
-            <p>
-              <strong>{{ r.numAnomalias }}</strong> anomalías globales (score &gt; {{ r.umbral }})
-              de {{ r.filas.length }} filas ·
-              <strong>{{ r.particiones.length }}</strong> particiones en
-              {{ r.contextos.length }} contexto(s)
+      <!-- Procesado de características y codificación (3.1.1 y 3.1.2 del artículo).
+           Va fuera del @if de la tabla para poder corregir una operación que dé error -->
+      @if (columnasBase().length > 0) {
+        <section class="tarjeta" aria-label="Procesado de características y codificación">
+          <app-panel-preparacion
+            [columnaTimestamp]="columnaTimestamp()"
+            [columnas]="columnasBase()"
+            [operaciones]="operacionesPedidas()"
+            [delArticulo]="operaciones() === null"
+            [resumen]="fusion()"
+            [diccionarioEntrada]="diccionarioEntrada()"
+            (aplicar)="aplicarProcesado($event)"
+            (restablecer)="restablecerProcesado()"
+            (cargarDiccionario)="cambiarDiccionario($event)"
+            (descargarDiccionario)="fusion() && descargarDiccionario(fusion()!)"
+          />
+        </section>
+      }
+
+      <!-- La tabla que se va a analizar, en números -->
+      @if (fusion(); as f) {
+        <section class="tarjeta space-y-4" aria-labelledby="titulo-tabla">
+          <div>
+            <h2 id="titulo-tabla" class="text-lg font-semibold text-slate-900">
+              La tabla que se va a analizar
+            </h2>
+            <p class="ayuda">
+              Una fila por momento y una columna por sensor, más las que añade el procesado.
             </p>
-            <p class="text-xs text-slate-500">
-              Semilla usada: <strong class="font-mono text-slate-700">{{ r.semilla }}</strong> (IF
-              global: {{ r.semilla }}; partición k: {{ r.semilla }} + k) ·
-              {{ r.numArboles }} árboles · muestra por árbol {{ r.tamanoMuestra }} filas
-              @if (!parametrosIF.semillaFija || parametrosIF.semilla !== r.semilla) {
-                ·
+          </div>
+          <dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="dato">
+              <dt class="dato-nombre">Filas (momentos)</dt>
+              <dd class="dato-valor">{{ numero(f.filas.length) }}</dd>
+            </div>
+            <div class="dato">
+              <dt class="dato-nombre">Columnas (características)</dt>
+              <dd class="dato-valor">{{ numero(f.ids.length) }}</dd>
+            </div>
+            @if (f.tipos.length > 0) {
+              <div class="dato">
+                <dt class="dato-nombre">Tipos de medida</dt>
+                <dd class="dato-valor">{{ f.tipos.length }}</dd>
+              </div>
+            }
+            <div class="dato">
+              <dt class="dato-nombre">Huecos rellenados</dt>
+              <dd class="dato-valor">
+                {{ numero(f.huecosRellenados) }}
+                <span class="text-sm font-normal text-slate-600">de {{ numero(f.huecos) }}</span>
+              </dd>
+            </div>
+          </dl>
+
+          <!-- Huecos: momentos en los que un sensor no tiene lectura -->
+          <form class="flex flex-wrap items-end gap-4" (ngSubmit)="aplicarRelleno()">
+            <!-- Desplegable con las opciones de OPCIONES_RELLENO (fusionar.ts) -->
+            <label class="etiqueta">
+              Rellenar los huecos con
+              <select class="campo" name="relleno" [(ngModel)]="relleno">
+                @for (opcion of opcionesRelleno; track opcion.valor) {
+                  <option [value]="opcion.valor">{{ opcion.texto }}</option>
+                }
+              </select>
+            </label>
+            <!-- El valor solo se usa con "Valor fijo". Los min/max son ayuda visual;
+                 la comprobación de verdad la hace validarRelleno -->
+            @if (relleno === 'fijo') {
+              <label class="etiqueta">
+                Valor (entre 0 y 1)
+                <input
+                  class="campo !w-32"
+                  name="valorRelleno"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  [(ngModel)]="valorRelleno"
+                />
+              </label>
+            }
+            <button type="submit" class="btn-secundario" [disabled]="!rellenoPendiente()">
+              Aplicar relleno
+            </button>
+            @if (rellenoPendiente()) {
+              <p class="pb-2 text-sm text-amber-900">⚠ Hay un cambio sin aplicar.</p>
+            }
+          </form>
+          <p class="text-sm text-slate-600">
+            Un hueco es un momento en el que un sensor no tiene lectura. Ojo: un 0 inventado en un
+            contador puede parecer una anomalía.
+          </p>
+
+          <!-- Las tablas, plegadas: se miran solo si hace falta -->
+          <details class="plegable">
+            <summary>Ver la tabla y descargarla</summary>
+            <div class="plegable-contenido">
+              <!-- Una línea por cada tipo con sus columnas y sus momentos -->
+              @if (f.tipos.length > 0) {
+                <div class="overflow-auto">
+                  <table class="tabla !min-w-0">
+                    <caption class="sr-only">
+                      Columnas y momentos de cada tipo de medida
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Tipo de medida</th>
+                        <th scope="col" class="!text-right">Columnas</th>
+                        <th scope="col" class="!text-right">Momentos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (tipo of f.tipos; track tipo.tipo) {
+                        <tr>
+                          <td class="font-mono">{{ tipo.tipo }}</td>
+                          <td class="text-right tabular-nums">{{ tipo.columnas }}</td>
+                          <td class="text-right tabular-nums">{{ tipo.filas }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              <div class="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  (click)="fijarSemilla(r.semilla)"
-                  class="text-blue-700 hover:underline"
+                  class="btn-secundario"
+                  (click)="descargar(f, '2_fusionado.csv')"
                 >
-                  Fijar esta semilla
+                  Descargar la tabla (2_fusionado.csv)
                 </button>
-              }
-            </p>
-            @if (r.celdasNoNumericas > 0) {
-              <p class="text-xs text-amber-700">
-                {{ r.celdasNoNumericas }} celdas vacías o no numéricas se han tratado como 0.
-              </p>
-            }
-            <!-- Columnas constantes: cuáles son y si se han quitado -->
-            @if (r.columnasConstantes.length > 0) {
-              <p
-                class="text-xs"
-                [class]="r.quitarConstantes ? 'text-slate-500' : 'text-amber-700'"
-                [title]="r.columnasConstantes.join(', ')"
-              >
-                {{ r.columnasConstantes.length }} columna(s) constante(s)
-                {{
-                  r.quitarConstantes
-                    ? 'ignorada(s) en cada Isolation Forest'
-                    : 'NO quitada(s): pueden bajar los scores'
-                }}
-                <span class="font-mono"
-                  >({{ r.columnasConstantes.slice(0, 5).join(', ')
-                  }}{{ r.columnasConstantes.length > 5 ? '…' : '' }})</span
-                >
-              </p>
-            }
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              (click)="descargarCif(r)"
-              class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-            >
-              Descargar tabla CIF (.csv)
-            </button>
-            <button
-              type="button"
-              (click)="descargarResumenParticiones(r)"
-              class="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-            >
-              Descargar resumen particiones (.csv)
-            </button>
-            <!-- Para que otra persona repita exactamente esta ejecución -->
-            <button
-              type="button"
-              (click)="descargarConfiguracion(r)"
-              class="rounded border border-emerald-600 bg-white px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-            >
-              Descargar configuración (.json)
-            </button>
-          </div>
-        </div>
-
-        <app-tabla-cif [resultado]="r" />
+                <!-- Qué es cada columna (tipo, uid y aulario). Solo con CSV largo: el pivotado no trae esa información -->
+                @if (lecturas()) {
+                  <button type="button" class="btn-secundario" (click)="descargarColumnas(f)">
+                    Descargar qué es cada columna (columnas.csv)
+                  </button>
+                }
+                <!-- La tabla sin separar por tipo, tal como sale de pivotar (paso intermedio) -->
+                @if (tabla(); as t) {
+                  <button
+                    type="button"
+                    class="btn-secundario"
+                    (click)="descargar(t, '1_pivotado.csv')"
+                  >
+                    Descargar sin separar por tipo (1_pivotado.csv)
+                  </button>
+                }
+              </div>
+              <app-vista-previa [tabla]="f" />
+            </div>
+          </details>
+        </section>
       }
-    </section>
+
+      <!-- Filtro de lecturas (solo formato largo): sigue visible aunque el filtro
+           deje la tabla vacía, para poder corregirlo -->
+      @if (lecturas(); as todas) {
+        <section class="tarjeta space-y-4" aria-labelledby="titulo-filtro">
+          <div>
+            <h2 id="titulo-filtro" class="text-lg font-semibold text-slate-900">
+              Elegir qué lecturas entran
+              <span
+                class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold"
+                [class]="
+                  esSinFiltro(filtro())
+                    ? 'bg-slate-200 text-slate-700'
+                    : 'bg-blue-100 text-blue-900'
+                "
+              >
+                {{ esSinFiltro(filtro()) ? 'Entran todas' : 'Filtro activo' }}
+              </span>
+            </h2>
+            <p class="ayuda">
+              Opcional. Marca los tipos de medida, aularios y sensores que quieres analizar y pulsa
+              «Aplicar filtros». No hace falta volver a leer el CSV.
+            </p>
+          </div>
+          <app-panel-filtros
+            [lecturas]="todas"
+            [filtro]="filtro()"
+            (aplicar)="aplicarFiltros($event)"
+          />
+        </section>
+      }
+
+      <div class="flex flex-wrap justify-between gap-3">
+        <button type="button" class="btn-secundario" (click)="irA(1)">← Datos</button>
+        <button type="button" class="btn-primario" [disabled]="!fusion()" (click)="irA(3)">
+          Continuar a los contextos →
+        </button>
+      </div>
+    }
+
+    <!-- ================================================================== -->
+    <!-- PASO 3 · CONTEXTOS                                                 -->
+    <!-- ================================================================== -->
+    @case (3) {
+      @if (fusion(); as f) {
+        <section class="tarjeta space-y-4" aria-labelledby="titulo-contextos-paso">
+          <div class="max-w-3xl">
+            <h2 id="titulo-contextos-paso" class="text-lg font-semibold text-slate-900">
+              Contextos y particiones
+            </h2>
+            <p class="ayuda">
+              Un <strong>contexto</strong> es una forma de mirar la instalación (por tipo de medida,
+              por edificio, por zona…) y sus <strong>particiones</strong> son los grupos de sensores
+              que salen al mirarla así. Cada partición tiene su propio Isolation Forest, y con eso
+              se sabe en qué grupos aparece una anomalía.
+            </p>
+          </div>
+          <!-- [(contextos)]: el editor cambia la lista y nos la devuelve -->
+          <app-editor-contextos
+            [columnas]="f.ids"
+            [tipos]="f.tipos"
+            [etiquetas]="etiquetas()"
+            [(contextos)]="contextos"
+          />
+          @if (contextos.length === 0) {
+            <p class="aviso-info">
+              <span>
+                Puedes continuar sin contextos: se calculará solo el Isolation Forest global, sin RI
+                ni II.
+              </span>
+            </p>
+          }
+        </section>
+
+        <div class="flex flex-wrap justify-between gap-3">
+          <button type="button" class="btn-secundario" (click)="irA(2)">← Preparar</button>
+          <button type="button" class="btn-primario" (click)="irA(4)">
+            Continuar a los ajustes →
+          </button>
+        </div>
+      }
+    }
+
+    <!-- ================================================================== -->
+    <!-- PASO 4 · AJUSTES                                                   -->
+    <!-- ================================================================== -->
+    @case (4) {
+      @if (fusion(); as f) {
+        <!-- Los min/max/step de los inputs son solo ayuda visual;
+             la comprobación de verdad la hace validarParametrosIF -->
+        <form class="space-y-5" (ngSubmit)="ejecutarCifPaso()">
+          <section class="tarjeta space-y-5" aria-labelledby="titulo-parametros">
+            <div class="max-w-3xl">
+              <h2 id="titulo-parametros" class="text-lg font-semibold text-slate-900">
+                Parámetros del Isolation Forest
+              </h2>
+              <p class="ayuda">
+                Se usan los mismos para el Isolation Forest de toda la tabla y para el de cada
+                partición. Vienen puestos los valores por defecto.
+              </p>
+            </div>
+
+            <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label class="etiqueta" for="numArboles">Número de árboles</label>
+                <input
+                  id="numArboles"
+                  class="campo"
+                  name="numArboles"
+                  type="number"
+                  min="1"
+                  step="1"
+                  [(ngModel)]="parametrosIF.numArboles"
+                  aria-describedby="ayuda-arboles"
+                />
+                <p id="ayuda-arboles" class="ayuda">
+                  Con más árboles el resultado depende menos del azar, y tarda más.
+                </p>
+              </div>
+              <div>
+                <label class="etiqueta" for="umbral">Umbral</label>
+                <input
+                  id="umbral"
+                  class="campo"
+                  name="umbral"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  [(ngModel)]="parametrosIF.umbral"
+                  aria-describedby="ayuda-umbral"
+                />
+                <p id="ayuda-umbral" class="ayuda">
+                  Un registro es anomalía si su score (entre 0 y 1) es mayor.
+                </p>
+              </div>
+              <div>
+                <label class="etiqueta" for="tamanoMuestra">Tamaño de muestra</label>
+                <input
+                  id="tamanoMuestra"
+                  class="campo"
+                  name="tamanoMuestra"
+                  type="number"
+                  min="2"
+                  step="1"
+                  [(ngModel)]="parametrosIF.tamanoMuestra"
+                  aria-describedby="ayuda-muestra"
+                />
+                <p id="ayuda-muestra" class="ayuda">
+                  Filas con las que se hace cada árbol. Lo habitual es 256.
+                </p>
+              </div>
+              <!-- Semilla: si no se fija, se genera una al azar en cada ejecución (y se enseña igualmente) -->
+              <div>
+                <label class="etiqueta" for="semilla">Semilla</label>
+                <input
+                  id="semilla"
+                  class="campo"
+                  name="semilla"
+                  type="number"
+                  min="0"
+                  step="1"
+                  [disabled]="!parametrosIF.semillaFija"
+                  [(ngModel)]="parametrosIF.semilla"
+                  aria-describedby="ayuda-semilla"
+                />
+                <label class="mt-2 flex items-center gap-2 text-sm text-slate-800">
+                  <input
+                    class="casilla"
+                    name="semillaFija"
+                    type="checkbox"
+                    [(ngModel)]="parametrosIF.semillaFija"
+                  />
+                  Usar siempre esta semilla
+                </label>
+                <p id="ayuda-semilla" class="ayuda">
+                  Con la misma semilla sale siempre el mismo resultado. Sin marcar, se elige una al
+                  azar cada vez.
+                </p>
+              </div>
+            </div>
+
+            <!-- Opción de quitar columnas constantes. El aviso sale en ámbar si se desactiva -->
+            <div
+              class="rounded-lg border p-4"
+              [class]="
+                parametrosIF.quitarConstantes
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-amber-300 bg-amber-50'
+              "
+            >
+              <label class="flex items-start gap-2 text-sm font-medium text-slate-900">
+                <input
+                  class="casilla mt-0.5"
+                  name="quitarConstantes"
+                  type="checkbox"
+                  [(ngModel)]="parametrosIF.quitarConstantes"
+                  aria-describedby="ayuda-constantes"
+                />
+                Quitar las columnas constantes antes de cada Isolation Forest (recomendado)
+              </label>
+              <p id="ayuda-constantes" class="ayuda pl-6">
+                @if (!parametrosIF.quitarConstantes) {
+                  <strong>⚠ Desactivado.</strong>
+                }
+                Una columna que vale lo mismo en todas las filas (por ejemplo, un sensor apagado)
+                acerca todos los scores a 0,5, también los de las anomalías, que entonces no llegan
+                al umbral. Quitarlas no cambia qué filas son raras.
+              </p>
+            </div>
+
+            @if (avisoAplicado(); as texto) {
+              <p class="aviso-bien">
+                <span>✓ {{ texto }}</span>
+              </p>
+            }
+          </section>
+
+          <!-- Estimación de árboles y umbral (procedimiento 2 del artículo) -->
+          <section class="tarjeta" aria-label="Estimación de árboles y umbral">
+            <app-panel-estimacion
+              [tabla]="f"
+              [parametrosIF]="parametrosIF"
+              [(ajustes)]="ajustesEstimacion"
+              [(resultado)]="estimacion"
+              (aplicar)="aplicarEstimacion($event)"
+            />
+          </section>
+
+          @if (errorCif(); as mensaje) {
+            <p class="aviso-error" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
+          }
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <button type="button" class="btn-secundario" (click)="irA(3)">← Contextos</button>
+            <div class="flex flex-wrap items-center gap-3">
+              @if (ejecutando()) {
+                <p class="text-sm text-slate-700" role="status">Calculando…</p>
+              }
+              <button type="submit" class="btn-primario" [disabled]="ejecutando()">
+                {{ ejecutando() ? 'Calculando…' : 'Ejecutar el CIF y ver los resultados →' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      }
+    }
+
+    <!-- ================================================================== -->
+    <!-- PASO 5 · RESULTADOS                                                -->
+    <!-- ================================================================== -->
+    @case (5) {
+      @if (resultadoCif(); as r) {
+        <section class="tarjeta space-y-5" aria-label="Resultados del CIF">
+          <app-resultados
+            [resultado]="r"
+            [(cortes)]="cortes"
+            [semillaFijada]="parametrosIF.semillaFija && parametrosIF.semilla === r.semilla"
+            (descargar)="descargarResultado($event, r)"
+            (fijarSemilla)="fijarSemilla($event)"
+          />
+        </section>
+
+        <div class="flex flex-wrap justify-between gap-3">
+          <button type="button" class="btn-secundario" (click)="irA(4)">
+            ← Cambiar los ajustes
+          </button>
+        </div>
+      }
+    }
   }
 </main>

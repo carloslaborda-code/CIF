@@ -1,0 +1,221 @@
+<!-- Los dos paneles de la Fig. 8. Comparten registros, escala y el registro que se está mirando. -->
+<div class="relative" (pointerleave)="activa.set(null)">
+  <h4 class="mb-1 text-sm font-medium text-slate-800">a) Isolation Forest global</h4>
+  <svg
+    class="block w-full rounded"
+    [attr.viewBox]="'0 0 ' + ANCHO + ' ' + ALTO"
+    role="img"
+    tabindex="0"
+    [attr.aria-label]="
+      'Score en el Isolation Forest global de los ' +
+      filas().length +
+      ' registros con más score. Usa las flechas izquierda y derecha para recorrerlos. Los mismos valores están en la pestaña Tabla.'
+    "
+    (keydown)="alPulsar($event)"
+    (blur)="activa.set(null)"
+  >
+    @for (m of marcasY(); track m) {
+      <line
+        [attr.x1]="margen.izquierda"
+        [attr.x2]="ANCHO - margen.derecha"
+        [attr.y1]="yDe(m)"
+        [attr.y2]="yDe(m)"
+        stroke="var(--grafico-rejilla)"
+      />
+      <text
+        class="grafico-texto"
+        [attr.x]="margen.izquierda - 8"
+        [attr.y]="yDe(m) + 4"
+        text-anchor="end"
+      >
+        {{ m.toFixed(2) }}
+      </text>
+    }
+    @for (d of dibujo(); track d.fila.id) {
+      <!-- Zona que reacciona al ratón: todo el hueco del registro -->
+      <rect
+        [attr.x]="d.zona.x"
+        [attr.width]="d.zona.ancho"
+        [attr.y]="margen.arriba"
+        [attr.height]="ALTO - margen.abajo - margen.arriba"
+        [attr.fill]="activa() === $index ? '#f1f5f9' : 'transparent'"
+        (pointerenter)="activa.set($index)"
+      />
+      <rect
+        [attr.x]="d.global.x"
+        [attr.width]="d.global.ancho"
+        [attr.y]="d.global.y"
+        [attr.height]="d.global.alto"
+        fill="#334155"
+        pointer-events="none"
+      />
+      <text
+        class="grafico-texto"
+        [attr.x]="d.centro"
+        [attr.y]="ALTO - margen.abajo + 16"
+        text-anchor="middle"
+      >
+        {{ d.fila.id }}
+      </text>
+    }
+    <!-- Umbral -->
+    <line
+      [attr.x1]="margen.izquierda"
+      [attr.x2]="ANCHO - margen.derecha"
+      [attr.y1]="yDe(resultado().umbral)"
+      [attr.y2]="yDe(resultado().umbral)"
+      stroke="#334155"
+      stroke-width="1.5"
+      stroke-dasharray="6 4"
+      pointer-events="none"
+    />
+    <text
+      class="grafico-etiqueta"
+      [attr.x]="margen.izquierda + 6"
+      [attr.y]="yDe(resultado().umbral) - 6"
+      pointer-events="none"
+    >
+      Umbral {{ resultado().umbral }}
+    </text>
+    <text
+      class="grafico-texto"
+      [attr.x]="(margen.izquierda + ANCHO - margen.derecha) / 2"
+      [attr.y]="ALTO - 6"
+      text-anchor="middle"
+    >
+      Registro (n.º)
+    </text>
+    <text
+      class="grafico-texto"
+      [attr.transform]="
+        'translate(13 ' + (ALTO - margen.abajo + margen.arriba) / 2 + ') rotate(-90)'
+      "
+      text-anchor="middle"
+    >
+      Score
+    </text>
+  </svg>
+
+  <h4 class="mb-1 mt-4 text-sm font-medium text-slate-800">b) Por contextos y particiones</h4>
+  @if (particiones().length === 0) {
+    <p class="aviso-info">No hay particiones. Crea contextos en el paso 3.</p>
+  } @else {
+    <ul class="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
+      @for (p of particiones(); track $index) {
+        <li class="flex items-center gap-2">
+          <span
+            class="h-3 w-3 rounded-sm"
+            [style.background-color]="p.color"
+            aria-hidden="true"
+          ></span>
+          {{ p.nombre }}
+        </li>
+      }
+    </ul>
+    <svg
+      class="block w-full rounded"
+      [attr.viewBox]="'0 0 ' + ANCHO + ' ' + ALTO"
+      role="img"
+      tabindex="0"
+      [attr.aria-label]="
+        'Valor en cada partición de los mismos ' +
+        filas().length +
+        ' registros: el score si supera el umbral y cero si no. Usa las flechas izquierda y derecha para recorrerlos.'
+      "
+      (keydown)="alPulsar($event)"
+      (blur)="activa.set(null)"
+    >
+      @for (m of marcasY(); track m) {
+        <line
+          [attr.x1]="margen.izquierda"
+          [attr.x2]="ANCHO - margen.derecha"
+          [attr.y1]="yDe(m)"
+          [attr.y2]="yDe(m)"
+          stroke="var(--grafico-rejilla)"
+        />
+        <text
+          class="grafico-texto"
+          [attr.x]="margen.izquierda - 8"
+          [attr.y]="yDe(m) + 4"
+          text-anchor="end"
+        >
+          {{ m.toFixed(2) }}
+        </text>
+      }
+      @for (d of dibujo(); track d.fila.id) {
+        <rect
+          [attr.x]="d.zona.x"
+          [attr.width]="d.zona.ancho"
+          [attr.y]="margen.arriba"
+          [attr.height]="ALTO - margen.abajo - margen.arriba"
+          [attr.fill]="activa() === $index ? '#f1f5f9' : 'transparent'"
+          (pointerenter)="activa.set($index)"
+        />
+        @for (b of d.barras; track $index) {
+          <rect
+            [attr.x]="b.x"
+            [attr.width]="b.ancho"
+            [attr.y]="b.y"
+            [attr.height]="b.alto"
+            [attr.fill]="b.color"
+            pointer-events="none"
+          />
+        }
+        <text
+          class="grafico-texto"
+          [attr.x]="d.centro"
+          [attr.y]="ALTO - margen.abajo + 16"
+          text-anchor="middle"
+        >
+          {{ d.fila.id }}
+        </text>
+      }
+      <text
+        class="grafico-texto"
+        [attr.x]="(margen.izquierda + ANCHO - margen.derecha) / 2"
+        [attr.y]="ALTO - 6"
+        text-anchor="middle"
+      >
+        Registro (n.º)
+      </text>
+      <text
+        class="grafico-texto"
+        [attr.transform]="
+          'translate(13 ' + (ALTO - margen.abajo + margen.arriba) / 2 + ') rotate(-90)'
+        "
+        text-anchor="middle"
+      >
+        Score en la partición
+      </text>
+    </svg>
+  }
+
+  <!-- Recuadro con todos los valores del registro que se está mirando -->
+  @if (detalle(); as d) {
+    <div
+      class="pointer-events-none absolute top-8 z-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-md"
+      [style.left.%]="d.centro > ANCHO * 0.55 ? null : (d.centro / ANCHO) * 100 + 4"
+      [style.right.%]="d.centro > ANCHO * 0.55 ? 100 - (d.centro / ANCHO) * 100 + 4 : null"
+    >
+      <p class="font-medium text-slate-900">Registro n.º {{ d.fila.id }}</p>
+      <p class="whitespace-nowrap text-slate-600">{{ d.fila.timestamp }}</p>
+      <p class="flex items-center gap-2 whitespace-nowrap text-slate-700">
+        <span class="h-2 w-2 rounded-sm bg-slate-700" aria-hidden="true"></span>
+        IF global: <strong class="tabular-nums">{{ d.fila.score.toFixed(3) }}</strong>
+      </p>
+      @for (p of particiones(); track $index) {
+        <p class="flex items-center gap-2 whitespace-nowrap text-slate-700">
+          <span
+            class="h-2 w-2 rounded-sm"
+            [style.background-color]="p.color"
+            aria-hidden="true"
+          ></span>
+          {{ p.nombre }}:
+          <strong class="tabular-nums">
+            {{ d.fila.valores[$index] > 0 ? d.fila.valores[$index].toFixed(2) : '0' }}
+          </strong>
+        </p>
+      }
+    </div>
+  }
+</div>

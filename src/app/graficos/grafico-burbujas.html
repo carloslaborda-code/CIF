@@ -1,0 +1,199 @@
+<ul class="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
+  @for (clase of ['grave', 'limite', 'normal']; track clase) {
+    <li class="flex items-center gap-2">
+      <span
+        class="h-3 w-3 rounded-full"
+        [style.background-color]="$any(color)[clase]"
+        aria-hidden="true"
+      ></span>
+      {{ $any(nombreClase)[clase] }}
+    </li>
+  }
+  <li class="text-slate-600">Tamaño de la burbuja: score del IF global</li>
+</ul>
+
+<div class="relative mx-auto max-w-3xl">
+  <svg
+    class="block w-full rounded"
+    [attr.viewBox]="'0 0 ' + ANCHO + ' ' + ALTO"
+    role="img"
+    tabindex="0"
+    aria-label="Mapa de los registros según su intensidad (II, eje horizontal) y su recurrencia (RI, eje vertical). El tamaño de cada burbuja es el score del Isolation Forest global. Usa las flechas izquierda y derecha para recorrer las burbujas."
+    (keydown)="alPulsar($event)"
+    (pointerleave)="activa.set(null)"
+    (blur)="activa.set(null)"
+  >
+    <!-- Zona "grave": RI e II por encima de los cortes -->
+    <rect
+      [attr.x]="px(cortes().ii)"
+      [attr.y]="py(1)"
+      [attr.width]="px(1) - px(cortes().ii)"
+      [attr.height]="py(cortes().ri) - py(1)"
+      fill="#fef2f2"
+    />
+    <text
+      class="grafico-etiqueta"
+      [attr.x]="px(1) - 6"
+      [attr.y]="py(cortes().ri) - 8"
+      text-anchor="end"
+    >
+      Zona grave: RI &gt; {{ cortes().ri }} e II &gt; {{ cortes().ii }}
+    </text>
+
+    <!-- Rejilla y ejes -->
+    @for (m of marcas; track m) {
+      <line
+        [attr.x1]="px(0)"
+        [attr.x2]="px(1)"
+        [attr.y1]="py(m)"
+        [attr.y2]="py(m)"
+        stroke="var(--grafico-rejilla)"
+      />
+      <line
+        [attr.x1]="px(m)"
+        [attr.x2]="px(m)"
+        [attr.y1]="py(0)"
+        [attr.y2]="py(1)"
+        stroke="var(--grafico-rejilla)"
+      />
+      <text
+        class="grafico-texto"
+        [attr.x]="px(-HOLGURA) - 6"
+        [attr.y]="py(m) + 4"
+        text-anchor="end"
+      >
+        {{ m.toFixed(2) }}
+      </text>
+      <text
+        class="grafico-texto"
+        [attr.x]="px(m)"
+        [attr.y]="py(-HOLGURA) + 16"
+        text-anchor="middle"
+      >
+        {{ m.toFixed(2) }}
+      </text>
+    }
+    <text
+      class="grafico-texto"
+      [attr.x]="(px(0) + px(1)) / 2"
+      [attr.y]="ALTO - 8"
+      text-anchor="middle"
+    >
+      II · intensidad (mediana de los scores en las particiones)
+    </text>
+    <text
+      class="grafico-texto"
+      [attr.transform]="'translate(14 ' + (py(0) + py(1)) / 2 + ') rotate(-90)'"
+      text-anchor="middle"
+    >
+      RI · recurrencia (parte de las particiones afectadas)
+    </text>
+
+    <!-- Cortes de la clasificación -->
+    <line
+      [attr.x1]="px(0)"
+      [attr.x2]="px(1)"
+      [attr.y1]="py(cortes().ri)"
+      [attr.y2]="py(cortes().ri)"
+      stroke="#334155"
+      stroke-width="1.5"
+      stroke-dasharray="6 4"
+    />
+    <line
+      [attr.x1]="px(cortes().ii)"
+      [attr.x2]="px(cortes().ii)"
+      [attr.y1]="py(0)"
+      [attr.y2]="py(1)"
+      stroke="#334155"
+      stroke-width="1.5"
+      stroke-dasharray="6 4"
+    />
+
+    <!-- Burbujas, con borde blanco para que se distingan cuando se pisan -->
+    @for (b of burbujas(); track $index) {
+      <circle
+        [attr.cx]="b.x"
+        [attr.cy]="b.y"
+        [attr.r]="b.radio"
+        [attr.fill]="color[b.clase]"
+        fill-opacity="0.85"
+        [attr.stroke]="activa() === $index ? '#0f172a' : 'white'"
+        stroke-width="2"
+        (pointerenter)="activa.set($index)"
+      />
+    }
+    <!-- Cuántos registros hay en el punto, si hay más de uno y no pisa otra etiqueta.
+         Van en un bucle aparte, después de todas las burbujas, para que ninguna las tape -->
+    @for (b of burbujas(); track $index) {
+      @if (conEtiqueta().has($index)) {
+        <text
+          class="grafico-etiqueta"
+          [attr.x]="b.x + b.radio + 4"
+          [attr.y]="b.y - b.radio + 4"
+          pointer-events="none"
+        >
+          ×{{ b.registros }}
+        </text>
+      }
+    }
+  </svg>
+
+  @if (detalle(); as d) {
+    <div
+      class="pointer-events-none absolute z-10 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-md"
+      [style.top.%]="d.y > ALTO * 0.55 ? null : (d.y / ALTO) * 100 + 5"
+      [style.bottom.%]="d.y > ALTO * 0.55 ? 100 - (d.y / ALTO) * 100 + 5 : null"
+      [style.left.%]="d.x > ANCHO * 0.55 ? null : (d.x / ANCHO) * 100 + 3"
+      [style.right.%]="d.x > ANCHO * 0.55 ? 100 - (d.x / ANCHO) * 100 + 3 : null"
+    >
+      <p class="font-medium text-slate-900">
+        {{ nombreClase[d.clase] }} · {{ d.registros }}
+        {{ d.registros === 1 ? 'registro' : 'registros' }}
+      </p>
+      <p class="whitespace-nowrap text-slate-700">
+        RI <strong class="tabular-nums">{{ d.ri.toFixed(2) }}</strong> · II
+        <strong class="tabular-nums">{{ d.ii.toFixed(2) }}</strong>
+      </p>
+      @for (f of d.ejemplos; track f.id) {
+        <p class="whitespace-nowrap text-slate-700">
+          N.º {{ f.id }} · {{ f.timestamp }} · score
+          <strong class="tabular-nums">{{ f.score.toFixed(3) }}</strong>
+        </p>
+      }
+      @if (d.registros > d.ejemplos.length) {
+        <p class="text-slate-600">y {{ d.registros - d.ejemplos.length }} más</p>
+      }
+    </div>
+  }
+</div>
+
+<details class="mt-2 text-sm">
+  <summary class="enlace inline-block">Ver los datos en una tabla</summary>
+  <div class="mt-2 max-h-64 overflow-auto rounded-lg border border-slate-200">
+    <table class="tabla">
+      <caption class="sr-only">
+        Registros agrupados por RI e II
+      </caption>
+      <thead class="sticky top-0 bg-slate-100">
+        <tr>
+          <th scope="col">Clase</th>
+          <th scope="col" class="!text-right">RI</th>
+          <th scope="col" class="!text-right">II</th>
+          <th scope="col" class="!text-right">Registros</th>
+          <th scope="col" class="!text-right">Score máximo</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (b of filasTabla(); track $index) {
+          <tr>
+            <td>{{ nombreClase[b.clase] }}</td>
+            <td class="text-right tabular-nums">{{ b.ri.toFixed(2) }}</td>
+            <td class="text-right tabular-nums">{{ b.ii.toFixed(2) }}</td>
+            <td class="text-right tabular-nums">{{ b.registros }}</td>
+            <td class="text-right tabular-nums">{{ b.scoreMaximo.toFixed(3) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</details>

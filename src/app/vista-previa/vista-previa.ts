@@ -7,6 +7,8 @@ import { TablaPivotada } from '../core/logica/pivotar';
 // de filas y más de cien columnas la página se quedaría muy pesada.
 @Component({
   selector: 'app-vista-previa',
+  // El elemento del componente es un bloque y separa a sus hijos entre sí.
+  host: { class: 'block' },
   templateUrl: './vista-previa.html',
 })
 export class VistaPrevia {

@@ -1,0 +1,306 @@
+<!-- 3.1.1 Procesado de características -->
+<section class="space-y-3" aria-labelledby="titulo-procesado">
+  <div class="max-w-3xl">
+    <h3 id="titulo-procesado" class="text-base font-semibold text-slate-900">
+      Procesado de características
+      @if (delArticulo() && !pendiente()) {
+        <span
+          class="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700"
+        >
+          Por defecto
+        </span>
+      }
+    </h3>
+    <p class="ayuda">
+      Operaciones que crean, juntan o quitan columnas antes de analizar, en este orden. Por defecto
+      se saca el día (DD), mes (MM), hora (HH) y minuto (MIN) de la fecha, para que el Isolation
+      Forest sepa cuándo pasa cada lectura. Las columnas nuevas van al final de la tabla.
+    </p>
+  </div>
+
+  @if (borrador().length === 0) {
+    <p class="text-sm text-slate-600">No hay operaciones: la tabla se analiza tal cual.</p>
+  } @else {
+    <ol class="space-y-2">
+      @for (o of borrador(); track $index; let i = $index, primera = $first, ultima = $last) {
+        <li
+          class="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+          [attr.aria-label]="'Operación ' + (i + 1) + ': ' + nombreOperacion[o.tipo]"
+        >
+          <span class="pb-2 text-sm font-semibold text-slate-900">
+            {{ i + 1 }}. {{ nombreOperacion[o.tipo] }}
+          </span>
+
+          @switch (o.tipo) {
+            @case ('extraer') {
+              <label class="etiqueta">
+                De la columna
+                <select
+                  class="campo"
+                  [ngModel]="o.origen"
+                  (ngModelChange)="o.origen = $event; refrescar()"
+                >
+                  @for (c of columnasEn(i); track c) {
+                    <option [value]="c">{{ c }}</option>
+                  }
+                </select>
+              </label>
+              <label class="etiqueta">
+                Sacar
+                <select
+                  class="campo"
+                  [ngModel]="o.op"
+                  (ngModelChange)="o.op = $event; alCambiarExtraccion(o)"
+                >
+                  @for (x of opcionesExtraccion; track x.valor) {
+                    <option [value]="x.valor">{{ x.texto }}</option>
+                  }
+                </select>
+              </label>
+              @if (o.op === 'subcadena') {
+                <label class="etiqueta">
+                  Desde el carácter
+                  <input
+                    class="campo !w-24"
+                    type="number"
+                    min="1"
+                    step="1"
+                    [ngModel]="o.inicio"
+                    (ngModelChange)="o.inicio = $event; refrescar()"
+                  />
+                </label>
+                <label class="etiqueta">
+                  Cuántos
+                  <input
+                    class="campo !w-24"
+                    type="number"
+                    min="1"
+                    step="1"
+                    [ngModel]="o.longitud"
+                    (ngModelChange)="o.longitud = $event; refrescar()"
+                  />
+                </label>
+              }
+            }
+            @case ('combinar') {
+              <label class="etiqueta">
+                Columna 1
+                <select class="campo" [ngModel]="o.a" (ngModelChange)="o.a = $event; refrescar()">
+                  @for (c of columnasEn(i); track c) {
+                    <option [value]="c">{{ c }}</option>
+                  }
+                </select>
+              </label>
+              <label class="etiqueta">
+                Columna 2
+                <select class="campo" [ngModel]="o.b" (ngModelChange)="o.b = $event; refrescar()">
+                  @for (c of columnasEn(i); track c) {
+                    <option [value]="c">{{ c }}</option>
+                  }
+                </select>
+              </label>
+            }
+            @case ('eliminar') {
+              <label class="etiqueta">
+                Columna
+                <select
+                  class="campo"
+                  [ngModel]="o.columna"
+                  (ngModelChange)="o.columna = $event; refrescar()"
+                >
+                  @for (c of columnasEn(i, false); track c) {
+                    <option [value]="c">{{ c }}</option>
+                  }
+                </select>
+              </label>
+            }
+            @case ('anadir') {
+              <label class="etiqueta">
+                Valor en todas las filas
+                <input
+                  class="campo !w-32"
+                  type="text"
+                  [ngModel]="o.valor"
+                  (ngModelChange)="o.valor = $event; refrescar()"
+                />
+              </label>
+            }
+          }
+
+          @if (o.tipo !== 'eliminar') {
+            <label class="etiqueta">
+              Nombre de la columna nueva
+              <input
+                class="campo !w-40"
+                type="text"
+                [ngModel]="o.destino"
+                (ngModelChange)="o.destino = $event; refrescar()"
+              />
+            </label>
+          }
+
+          <div class="ml-auto flex gap-1">
+            <button
+              type="button"
+              class="btn-secundario !px-2"
+              [disabled]="primera"
+              [attr.aria-label]="'Subir la operación ' + (i + 1)"
+              (click)="mover(i, -1)"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              class="btn-secundario !px-2"
+              [disabled]="ultima"
+              [attr.aria-label]="'Bajar la operación ' + (i + 1)"
+              (click)="mover(i, 1)"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              class="btn-secundario !px-2"
+              [attr.aria-label]="'Quitar la operación ' + (i + 1)"
+              (click)="quitar(i)"
+            >
+              ✕
+            </button>
+          </div>
+        </li>
+      }
+    </ol>
+  }
+
+  <div class="flex flex-wrap gap-2">
+    <button type="button" class="btn-secundario" (click)="agregar('extraer')">+ Extraer</button>
+    <button type="button" class="btn-secundario" (click)="agregar('combinar')">+ Combinar</button>
+    <button type="button" class="btn-secundario" (click)="agregar('eliminar')">+ Eliminar</button>
+    <button type="button" class="btn-secundario" (click)="agregar('anadir')">+ Añadir</button>
+  </div>
+
+  <ul class="ayuda list-disc space-y-1 pl-5">
+    <li>
+      <strong>Extraer:</strong> saca de una fecha el día, el mes, el año, la hora, el minuto o el
+      día de la semana, o un trozo de un texto.
+    </li>
+    <li>
+      <strong>Combinar:</strong> junta dos columnas en una nueva (zona1 y bomba → zona1_bomba). Si
+      falta uno de los dos valores, queda un hueco.
+    </li>
+    <li><strong>Eliminar:</strong> quita una columna.</li>
+    <li><strong>Añadir:</strong> crea una columna con el mismo valor en todas las filas.</li>
+  </ul>
+
+  @if (error(); as mensaje) {
+    <p class="aviso-error" role="alert">
+      <span>{{ mensaje }}</span>
+    </p>
+  }
+
+  <div class="flex flex-wrap items-center gap-3">
+    <button
+      type="button"
+      class="btn-primario"
+      [disabled]="!pendiente() || error() !== null"
+      (click)="alAplicar()"
+    >
+      Aplicar el procesado
+    </button>
+    @if (!delArticulo() || pendiente()) {
+      <button type="button" class="btn-secundario" (click)="restablecer.emit()">
+        Volver a las de por defecto
+      </button>
+    }
+    @if (pendiente()) {
+      <p class="text-sm text-amber-900">⚠ Hay cambios sin aplicar.</p>
+    }
+  </div>
+
+  @if (resumen(); as r) {
+    @if (r.columnasNuevas.length > 0) {
+      <p class="text-sm text-slate-700">
+        Columnas nuevas:
+        <span class="font-mono">{{ r.columnasNuevas.join(', ') }}</span>
+      </p>
+    }
+  }
+</section>
+
+<!-- 3.1.2 Codificación -->
+<section class="space-y-3 border-t border-slate-200 pt-5" aria-labelledby="titulo-codificacion">
+  <div class="max-w-3xl">
+    <h3 id="titulo-codificacion" class="text-base font-semibold text-slate-900">Codificación</h3>
+    <p class="ayuda">
+      El Isolation Forest solo trabaja con números. Las columnas con texto se pasan a números con un
+      diccionario (un número distinto por cada valor, empezando en 1). Las que ya son numéricas no
+      se tocan. Guardar el diccionario y cargarlo con otros datos hace que los mismos valores tengan
+      el mismo número.
+    </p>
+  </div>
+
+  @if (resumen(); as r) {
+    @if (r.columnasCodificadas.length === 0) {
+      <p class="text-sm text-slate-700">
+        No se ha codificado ninguna columna: todas son numéricas.
+      </p>
+    } @else {
+      <p class="aviso-info">
+        <span>
+          <strong
+            >{{ r.columnasCodificadas.length }}
+            {{
+              r.columnasCodificadas.length === 1 ? 'columna codificada' : 'columnas codificadas'
+            }}:</strong
+          >
+          <span class="font-mono">
+            {{ r.columnasCodificadas.slice(0, maxNombres).join(', ') }}
+          </span>
+          @if (r.columnasCodificadas.length > maxNombres) {
+            y {{ r.columnasCodificadas.length - maxNombres }} más.
+          }
+          Si alguna tenía que ser numérica, revisa el CSV (por ejemplo, decimales con coma).
+        </span>
+      </p>
+    }
+    <p class="text-sm text-slate-700">
+      Diccionario: <strong class="tabular-nums">{{ valoresDiccionario() }}</strong>
+      {{ valoresDiccionario() === 1 ? 'valor' : 'valores' }}
+      @if (valoresEntrada() > 0) {
+        ({{ valoresEntrada() }} del diccionario cargado y {{ r.valoresNuevos }} nuevos)
+      }
+    </p>
+  }
+
+  <div class="flex flex-wrap gap-2">
+    <label
+      class="btn-secundario focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
+    >
+      Cargar diccionario (.csv)
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        class="sr-only"
+        (change)="alElegirDiccionario($event)"
+      />
+    </label>
+    <button
+      type="button"
+      class="btn-secundario"
+      [disabled]="valoresDiccionario() === 0"
+      (click)="descargarDiccionario.emit()"
+    >
+      Descargar diccionario (diccionario.csv)
+    </button>
+    @if (valoresEntrada() > 0) {
+      <button type="button" class="btn-secundario" (click)="cargarDiccionario.emit({})">
+        Empezar con el diccionario vacío
+      </button>
+    }
+  </div>
+  @if (errorDiccionario; as mensaje) {
+    <p class="aviso-error" role="alert">
+      <span>{{ mensaje }}</span>
+    </p>
+  }
+</section>

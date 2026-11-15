@@ -24,6 +24,8 @@ import type { ResumenTipo } from '../core/logica/fusionar';
  */
 @Component({
   selector: 'app-editor-contextos',
+  // El elemento del componente es un bloque y separa a sus hijos entre sí.
+  host: { class: 'block space-y-4' },
   imports: [FormsModule],
   templateUrl: './editor-contextos.html',
 })

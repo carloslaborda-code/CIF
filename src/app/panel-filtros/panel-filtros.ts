@@ -24,6 +24,8 @@ type Seleccion = Record<CampoFiltro, Set<string>>;
  */
 @Component({
   selector: 'app-panel-filtros',
+  // El elemento del componente es un bloque y separa a sus hijos entre sí.
+  host: { class: 'block space-y-4' },
   imports: [FormsModule],
   templateUrl: './panel-filtros.html',
 })

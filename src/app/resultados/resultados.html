@@ -1,0 +1,232 @@
+<!-- Resumen: lo primero que se ve -->
+<dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="dato">
+    <dt class="dato-nombre">Registros analizados</dt>
+    <dd class="dato-valor">{{ numero(resultado().filas.length) }}</dd>
+  </div>
+  <div class="dato">
+    <dt class="dato-nombre">Anomalías globales (score &gt; {{ resultado().umbral }})</dt>
+    <dd class="dato-valor">
+      {{ numero(resultado().numAnomalias) }}
+      <span class="text-sm font-normal text-slate-600">
+        {{ porcentaje(resultado().numAnomalias / resultado().filas.length, 1) }}
+      </span>
+    </dd>
+  </div>
+  <div class="dato !border-red-200 !bg-red-50">
+    <dt class="dato-nombre"><span aria-hidden="true">▲</span> Graves</dt>
+    <dd class="dato-valor">{{ numero(clases().grave) }}</dd>
+  </div>
+  <div class="dato !border-amber-200 !bg-amber-50">
+    <dt class="dato-nombre"><span aria-hidden="true">◆</span> Límite</dt>
+    <dd class="dato-valor">{{ numero(clases().limite) }}</dd>
+  </div>
+</dl>
+
+<!-- Con qué se ha calculado -->
+<p class="text-sm text-slate-600">
+  Calculado con {{ resultado().numArboles }} árboles, muestra de
+  {{ resultado().tamanoMuestra }} filas por árbol y semilla
+  <strong class="text-slate-900">{{ resultado().semilla }}</strong> ·
+  {{ resultado().particiones.length }} particiones en {{ resultado().contextos.length }}
+  {{ resultado().contextos.length === 1 ? 'contexto' : 'contextos' }}.
+  @if (!semillaFijada()) {
+    <button type="button" class="enlace" (click)="fijarSemilla.emit(resultado().semilla)">
+      Fijar esta semilla para repetirlo
+    </button>
+  }
+</p>
+
+@if (resultado().numAnomalias === 0 && clases().grave === 0 && clases().limite === 0) {
+  <p class="aviso-info">
+    <span>
+      <strong>No ha salido ninguna anomalía.</strong> Ningún registro supera el umbral
+      {{ resultado().umbral }}, ni en el conjunto ni en las particiones. Si esperabas alguna, vuelve
+      al paso 4 y usa «Estimar árboles y umbral», o baja el umbral a mano.
+    </span>
+  </p>
+}
+@if (resultado().celdasNoNumericas > 0) {
+  <p class="aviso-alerta">
+    <span>
+      <strong>Aviso:</strong> {{ numero(resultado().celdasNoNumericas) }} celdas vacías o con texto
+      se han tratado como 0.
+    </span>
+  </p>
+}
+@if (resultado().columnasConstantes.length > 0) {
+  <p [class]="resultado().quitarConstantes ? 'text-sm text-slate-600' : 'aviso-alerta'">
+    <span>
+      {{ resultado().columnasConstantes.length }}
+      {{
+        resultado().columnasConstantes.length === 1 ? 'columna constante' : 'columnas constantes'
+      }}
+      {{
+        resultado().quitarConstantes
+          ? 'no se han usado en los Isolation Forest'
+          : 'NO se han quitado y pueden bajar los scores'
+      }}:
+      <span class="font-mono text-xs">
+        {{ resultado().columnasConstantes.slice(0, 5).join(', ')
+        }}{{ resultado().columnasConstantes.length > 5 ? '…' : '' }}
+      </span>
+    </span>
+  </p>
+}
+
+<app-pestanas nombre="Vistas de los resultados" [pestanas]="pestanas" [(activa)]="pestana" />
+
+<!-- Solo se pinta el contenido de la pestaña activa -->
+<div
+  role="tabpanel"
+  [id]="'panel-' + pestana()"
+  [attr.aria-labelledby]="'pestana-' + pestana()"
+  tabindex="0"
+  class="space-y-4 rounded-lg"
+>
+  @switch (pestana()) {
+    @case ('tabla') {
+      <app-tabla-cif [resultado]="resultado()" [cortes]="cortes()" />
+    }
+
+    @case ('mapa') {
+      <div class="max-w-3xl">
+        <h3 class="text-base font-semibold text-slate-900">Recurrencia e intensidad</h3>
+        <p class="ayuda">
+          Cada burbuja son los registros con ese RI y ese II. Arriba a la derecha están los graves:
+          salen en muchas particiones y con fuerza. Pegados al eje izquierdo, los casos límite.
+        </p>
+      </div>
+      <!-- Cortes de la clasificación: cambian el mapa, la tabla y el CSV -->
+      <fieldset class="flex flex-wrap items-end gap-4 rounded-lg border border-slate-200 p-4">
+        <legend class="px-1 text-sm font-medium text-slate-800">Un registro es grave si…</legend>
+        <label class="etiqueta">
+          RI es mayor que
+          <input
+            class="campo !w-28"
+            type="number"
+            min="0"
+            max="1"
+            step="0.05"
+            [(ngModel)]="corteRi"
+          />
+        </label>
+        <label class="etiqueta">
+          e II es mayor que
+          <input
+            class="campo !w-28"
+            type="number"
+            min="0"
+            max="1"
+            step="0.05"
+            [(ngModel)]="corteIi"
+          />
+        </label>
+        @if (cortesCambiados()) {
+          <button type="button" class="btn-secundario" (click)="restablecerCortes()">
+            Volver a los de por defecto (0,25 y 0)
+          </button>
+        }
+      </fieldset>
+      <app-grafico-burbujas [filas]="resultado().filas" [cortes]="cortes()" />
+    }
+
+    @case ('particiones') {
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div class="max-w-3xl">
+          <h3 class="text-base font-semibold text-slate-900">
+            Score global frente a las particiones
+          </h3>
+          <p class="ayuda">
+            Los registros con más score global: arriba, su score en el Isolation Forest de toda la
+            tabla; abajo, su valor en cada partición (0 si no supera el umbral). Un registro con
+            muchas barras abajo aparece en muchos grupos de sensores.
+          </p>
+        </div>
+        <label class="etiqueta">
+          Registros
+          <select
+            class="campo"
+            [ngModel]="numFilasParticiones()"
+            (ngModelChange)="numFilasParticiones.set(+$event)"
+          >
+            <option [value]="10">10</option>
+            <option [value]="20">20</option>
+          </select>
+        </label>
+      </div>
+      <div class="max-w-4xl">
+        <app-grafico-particiones [resultado]="resultado()" [numFilas]="numFilasParticiones()" />
+      </div>
+    }
+
+    @case ('tiempo') {
+      <div class="max-w-3xl">
+        <h3 class="text-base font-semibold text-slate-900">Score global a lo largo del tiempo</h3>
+        <p class="ayuda">
+          Los puntos marcan los registros graves (rojo) y las demás anomalías globales (ámbar).
+          @if (marcasTiempo().length === 0) {
+            Ahora mismo no hay ninguno.
+          }
+        </p>
+      </div>
+      <div class="max-w-4xl">
+        <app-grafico-lineas
+          descripcion="Score del Isolation Forest global de cada registro, en orden temporal, con el umbral"
+          [series]="serieTiempo()"
+          etiquetaX="Momento"
+          etiquetaY="Score"
+          [formatoX]="formatoMomento"
+          [formatoY]="formato3"
+          [lineasH]="lineaUmbral()"
+          [marcas]="marcasTiempo()"
+          [alto]="300"
+        />
+      </div>
+    }
+
+    @case ('comparacion') {
+      <app-comparacion-particiones [resultado]="resultado()" />
+    }
+
+    @case ('descargas') {
+      <ul class="grid gap-3 lg:grid-cols-3">
+        <li class="flex flex-col gap-3 rounded-lg border border-slate-200 p-4">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-slate-900">Tabla CIF completa</h3>
+            <p class="ayuda">
+              Todos los registros con su score, clase, II, RI y el valor en cada partición, con y
+              sin umbral. En CSV.
+            </p>
+          </div>
+          <button type="button" class="btn-secundario" (click)="descargar.emit('tabla')">
+            Descargar tabla (.csv)
+          </button>
+        </li>
+        <li class="flex flex-col gap-3 rounded-lg border border-slate-200 p-4">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-slate-900">Resumen por partición</h3>
+            <p class="ayuda">
+              Columnas, anomalías, score medio y máximo y semilla de cada partición. En CSV.
+            </p>
+          </div>
+          <button type="button" class="btn-secundario" (click)="descargar.emit('particiones')">
+            Descargar resumen (.csv)
+          </button>
+        </li>
+        <li class="flex flex-col gap-3 rounded-lg border border-slate-200 p-4">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-slate-900">Configuración de esta ejecución</h3>
+            <p class="ayuda">
+              Con este fichero y el mismo CSV, cualquiera obtiene exactamente este resultado:
+              filtro, relleno, parámetros, semilla y contextos. En JSON.
+            </p>
+          </div>
+          <button type="button" class="btn-secundario" (click)="descargar.emit('configuracion')">
+            Descargar configuración (.json)
+          </button>
+        </li>
+      </ul>
+    }
+  }
+</div>

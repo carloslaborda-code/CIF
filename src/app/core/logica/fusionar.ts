@@ -8,11 +8,22 @@
  *   2. Pivotar cada tipo (con la función del paso 1) y renombrar sus columnas
  *      como tipo_id, para que no se mezclen ids iguales de tipos distintos.
  *   3. Alinear: una fila por cada timestamp de cualquier tipo, y todas las columnas.
- *   4. Rellenar los huecos que quedan.
+ *   4. Procesado de características y codificación (preparar.ts).
+ *   5. Rellenar los huecos que quedan.
+ *
+ * Los pasos 4 y 5 son las fases 3.1.1, 3.1.2 y 3.1.3 del artículo, en el orden de su Fig. 1.
  *
  * Esta tabla fusionada es la que luego le pasamos al CIF (paso 4).
  */
-import { compararTimestamps, FilaPivotada, Lectura, pivotar, TablaPivotada } from './pivotar';
+import {
+  compararIds,
+  compararTimestamps,
+  FilaPivotada,
+  Lectura,
+  pivotar,
+  TablaPivotada,
+} from './pivotar';
+import { Diccionario, Preparacion, prepararCaracteristicas, SIN_PREPARACION } from './preparar';
 
 /** Cómo rellenar las celdas vacías de la tabla fusionada. */
 export type ModoRelleno = 'fijo' | 'anterior' | 'vacio';
@@ -69,6 +80,39 @@ export interface TablaFusionada extends TablaPivotada {
   huecos: number;
   /** Celdas que se han rellenado según el modo elegido. */
   huecosRellenados: number;
+  /** Características que ha añadido el procesado (3.1.1). */
+  columnasNuevas: string[];
+  /** Características cualitativas que se han codificado (3.1.2). */
+  columnasCodificadas: string[];
+  /** Diccionario de la codificación: el de entrada más los valores nuevos. */
+  diccionario: Diccionario;
+  /** Cuántos valores nuevos se han añadido al diccionario. */
+  valoresNuevos: number;
+}
+
+/**
+ * Procesado, codificación y relleno de huecos, en el orden de la Fig. 1 del
+ * artículo. Lo comparten el CSV largo (después de alinear) y el ya pivotado.
+ */
+function prepararYRellenar(
+  alineada: TablaPivotada,
+  modo: ModoRelleno,
+  valorRelleno: number,
+  preparacion: Preparacion,
+): Omit<TablaFusionada, 'tipos'> {
+  const p = prepararCaracteristicas(alineada, preparacion);
+  // Contamos los huecos antes de rellenar, si no siempre saldría 0
+  const huecos = contarHuecos(p.tabla);
+  const { tabla, rellenados } = rellenarHuecos(p.tabla, modo, valorRelleno);
+  return {
+    ...tabla,
+    huecos,
+    huecosRellenados: rellenados,
+    columnasNuevas: p.columnasNuevas,
+    columnasCodificadas: p.columnasCodificadas,
+    diccionario: p.diccionario,
+    valoresNuevos: p.valoresNuevos,
+  };
 }
 
 /** Divide las lecturas por tipo. Los tipos salen ordenados alfabéticamente. */
@@ -209,7 +253,8 @@ export function rellenarHuecos(
 }
 
 /**
- * Proceso completo: divide por tipo, pivota cada tipo, alinea y rellena huecos.
+ * Proceso completo: divide por tipo, pivota cada tipo, alinea, procesa y codifica
+ * las características y rellena huecos.
  * Es la única función de este fichero que llama la página principal.
  */
 export function fusionar(
@@ -217,6 +262,7 @@ export function fusionar(
   columnaTimestamp: string,
   modo: ModoRelleno,
   valorRelleno: number = VALOR_RELLENO_POR_DEFECTO,
+  preparacion: Preparacion = SIN_PREPARACION,
 ): TablaFusionada {
   // 1. Separar por tipo
   const porTipo = dividirPorTipo(lecturas);
@@ -232,25 +278,31 @@ export function fusionar(
 
   // 3. Alinear todas en una sola tabla
   const alineada = alinear(tablas, columnaTimestamp);
-  // Contamos los huecos antes de rellenar, si no siempre saldría 0
-  const huecos = contarHuecos(alineada);
-  // 4. Rellenar
-  const { tabla, rellenados } = rellenarHuecos(alineada, modo, valorRelleno);
-
-  return { ...tabla, tipos, huecos, huecosRellenados: rellenados };
+  // 4 y 5. Procesar, codificar y rellenar
+  return { ...prepararYRellenar(alineada, modo, valorRelleno, preparacion), tipos };
 }
 
 /**
  * Para un CSV que ya viene pivotado: no hay que dividir ni alinear,
- * solo rellenar sus huecos. Se devuelve como TablaFusionada (sin tipos)
+ * solo procesar, codificar y rellenar sus huecos. Se devuelve como TablaFusionada (sin tipos)
  * para que el resto de la página (vista previa, descarga, CIF) lo trate igual.
  */
 export function prepararTablaPivotada(
   tablaCargada: TablaPivotada,
   modo: ModoRelleno,
   valorRelleno: number = VALOR_RELLENO_POR_DEFECTO,
+  preparacion: Preparacion = SIN_PREPARACION,
 ): TablaFusionada {
-  const huecos = contarHuecos(tablaCargada);
-  const { tabla, rellenados } = rellenarHuecos(tablaCargada, modo, valorRelleno);
-  return { ...tabla, tipos: [], huecos, huecosRellenados: rellenados };
+  return { ...prepararYRellenar(tablaCargada, modo, valorRelleno, preparacion), tipos: [] };
+}
+
+/**
+ * Columnas que tendrá la tabla fusionada antes del procesado de características
+ * (tipo_id, en el mismo orden que fusionar). Sirve para elegir columnas en las
+ * operaciones aunque la última preparación haya dado error.
+ */
+export function columnasFusionadas(lecturas: Lectura[]): string[] {
+  return [...dividirPorTipo(lecturas)].flatMap(([tipo, lista]) =>
+    [...new Set(lista.map((l) => l.id))].sort(compararIds).map((id) => nombreColumna(tipo, id)),
+  );
 }
