@@ -13,7 +13,7 @@ El Isolation Forest es la librería de Emilia Rouanet Feliu, copiada **sin cambi
 
 ## Uso
 
-Requisitos: Node.js 20.19 o superior.
+Requisitos: Node.js 20.19+, 22.12+ o 24+ (los que admite Angular 21).
 
 ```bash
 npm install
@@ -190,4 +190,6 @@ Los gráficos no usan librería a propósito:
 
 ## Licencia
 
-Este proyecto se distribuye bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+El código de este proyecto se distribuye bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+
+**Excepción:** la carpeta `src/app/core/lib/isolation-forest/` es la librería de Emilia Rouanet Feliu, de su proyecto *Isolation Forest Visualizer*. Se incluye sin cambios y con permiso de su autora, que solo pide que se la mencione. No está cubierta por la licencia MIT de este proyecto: si reutilizas esa carpeta, menciona a Emilia Rouanet Feliu como autora.
