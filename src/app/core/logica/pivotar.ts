@@ -72,7 +72,15 @@ export interface TablaPivotada {
   ids: string[];
   /** Filas ordenadas por timestamp. `valores[i]` corresponde a `ids[i]`. */
   filas: FilaPivotada[];
+  /**
+   * true si el CSV no tenía columna de fecha. Entonces el timestamp de cada fila
+   * es su número de registro (1, 2, 3…) y columnaTimestamp es COLUMNA_REGISTRO.
+   */
+  sinFecha?: boolean;
 }
+
+/** Nombre de la columna que identifica cada fila cuando el CSV no tiene fecha. */
+export const COLUMNA_REGISTRO = 'registro';
 
 /**
  * Comprueba que los parámetros tienen sentido.

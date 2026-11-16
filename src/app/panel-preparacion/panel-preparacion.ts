@@ -30,7 +30,7 @@ const NOMBRE_OPERACION: Record<Operacion['tipo'], string> = {
  *
  * Se usa así:
  *   <app-panel-preparacion [columnaTimestamp]="..." [columnas]="..." [operaciones]="..."
- *     [delArticulo]="..." [resumen]="..." [diccionarioEntrada]="..."
+ *     [delArticulo]="..." [sinFecha]="..." [resumen]="..." [diccionarioEntrada]="..."
  *     (aplicar)="..." (restablecer)="..." (cargarDiccionario)="..." (descargarDiccionario)="..." />
  *
  * Las operaciones se editan en un borrador y solo se aplican (y se rehace la
@@ -51,6 +51,8 @@ export class PanelPreparacion {
   readonly operaciones = input.required<Operacion[]>();
   /** true si son las del experimento del artículo (no se han cambiado). */
   readonly delArticulo = input(false);
+  /** true si la tabla no tiene fecha: entonces por defecto no hay operaciones. */
+  readonly sinFecha = input(false);
   /** Resultado de la última preparación, o null si dio error. */
   readonly resumen = input<ResumenPreparacion | null>(null);
   /** Diccionario con el que empieza la codificación. */

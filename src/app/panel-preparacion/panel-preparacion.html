@@ -12,9 +12,14 @@
       }
     </h3>
     <p class="ayuda">
-      Operaciones que crean, juntan o quitan columnas antes de analizar, en este orden. Por defecto
-      se saca el día (DD), mes (MM), hora (HH) y minuto (MIN) de la fecha, para que el Isolation
-      Forest sepa cuándo pasa cada lectura. Las columnas nuevas van al final de la tabla.
+      Operaciones que crean, juntan o quitan columnas antes de analizar, en este orden.
+      @if (sinFecha()) {
+        La tabla no tiene fecha, así que por defecto no hay ninguna.
+      } @else {
+        Por defecto se saca el día (DD), mes (MM), hora (HH) y minuto (MIN) de la fecha, para que
+        el Isolation Forest sepa cuándo pasa cada lectura.
+      }
+      Las columnas nuevas van al final de la tabla.
     </p>
   </div>
 

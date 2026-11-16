@@ -120,13 +120,36 @@
                 <span>
                   <span class="block text-sm font-semibold text-slate-900">Una tabla ya hecha</span>
                   <span class="block text-sm text-slate-600">
-                    Ya pivotado: el momento en la primera columna y un sensor en cada una de las
-                    demás. Un solo fichero.
+                    Ya pivotado: el momento en la primera columna (o sin fecha) y un sensor en cada
+                    una de las demás. Un solo fichero.
                   </span>
                 </span>
               </label>
             </div>
           </fieldset>
+
+          <!-- Sin fecha (como la pestaña 3 del Excel del tutor): todas las columnas son datos
+               y cada fila se identifica por su número de registro -->
+          @if (origen === 'pivotado') {
+            <label class="flex items-start gap-3">
+              <input
+                type="checkbox"
+                name="sinFecha"
+                class="casilla mt-0.5"
+                [(ngModel)]="sinFecha"
+                (ngModelChange)="limpiarResultados()"
+              />
+              <span>
+                <span class="block text-sm font-semibold text-slate-900">
+                  El CSV no tiene columna de fecha
+                </span>
+                <span class="block text-sm text-slate-600">
+                  Todas las columnas son datos. Cada fila se identifica por su número de registro:
+                  la primera fila después de la cabecera es el registro 1.
+                </span>
+              </span>
+            </label>
+          }
 
           <!-- Zona de carga: se puede pulsar o arrastrar ficheros encima -->
           <div>
@@ -252,6 +275,7 @@
             [columnas]="columnasBase()"
             [operaciones]="operacionesPedidas()"
             [delArticulo]="operaciones() === null"
+            [sinFecha]="!tieneFecha()"
             [resumen]="fusion()"
             [diccionarioEntrada]="diccionarioEntrada()"
             (aplicar)="aplicarProcesado($event)"

@@ -6,6 +6,7 @@
  */
 import * as Papa from 'papaparse';
 import {
+  COLUMNA_REGISTRO,
   columnasQueFaltan,
   extraerLectura,
   FilaPivotada,
@@ -114,8 +115,18 @@ export async function leerVariosCsv(ficheros: File[], p: ParametrosColumnas): Pr
  * - Si a una fila le faltan celdas al final, se completan con '' (huecos).
  * - Es un error que una fila tenga más celdas que la cabecera, que haya
  *   columnas o timestamps repetidos, o que no haya ninguna fila con datos.
+ *
+ * Con sinFecha, todas las columnas son datos y cada fila se identifica por su
+ * número de registro (ver filasSinFecha).
  */
-export function filasATablaPivotada(filas: string[][], nombreFichero: string): TablaPivotada {
+export function filasATablaPivotada(
+  filas: string[][],
+  nombreFichero: string,
+  sinFecha = false,
+): TablaPivotada {
+  if (sinFecha) {
+    return filasSinFecha(filas, nombreFichero);
+  }
   const [cabecera, ...datos] = filas;
   const nombres = (cabecera ?? []).map((n) => n.trim());
 
@@ -166,13 +177,63 @@ export function filasATablaPivotada(filas: string[][], nombreFichero: string): T
 }
 
 /**
+ * CSV sin columna de fecha (como la pestaña 3 del Excel del tutor): todas las
+ * columnas son datos y cada fila se identifica por su número de registro, que
+ * empieza en 1 en la primera fila después de la cabecera. Ese número va en el
+ * timestamp de la fila, y la columna se llama COLUMNA_REGISTRO.
+ *
+ * Como no hay timestamp, no se descarta ninguna fila (las líneas en blanco ya
+ * las salta PapaParse) y no se miran repetidos.
+ */
+function filasSinFecha(filas: string[][], nombreFichero: string): TablaPivotada {
+  const [cabecera, ...datos] = filas;
+  const ids = (cabecera ?? []).map((n) => n.trim());
+
+  if (ids.length === 0) {
+    throw new Error(`${nombreFichero}: hace falta al menos una columna de datos.`);
+  }
+  if (ids.some((id) => id === '')) {
+    throw new Error(`${nombreFichero}: hay columnas sin nombre en la cabecera.`);
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new Error(`${nombreFichero}: hay columnas con el mismo nombre en la cabecera.`);
+  }
+  // Se chocaría con la columna del número de registro. Un CSV descargado de la
+  // propia herramienta sin fecha empieza por esa columna: se carga con fecha.
+  if (ids.includes(COLUMNA_REGISTRO)) {
+    throw new Error(
+      `${nombreFichero}: hay una columna llamada "${COLUMNA_REGISTRO}". Si es el número de ` +
+        'registro, carga el CSV sin marcar «no tiene columna de fecha».',
+    );
+  }
+
+  const filasTabla: FilaPivotada[] = datos.map((fila, i) => {
+    const valores = fila.map((c) => c.trim());
+    if (valores.length > ids.length) {
+      throw new Error(`${nombreFichero}: el registro ${i + 1} tiene más columnas que la cabecera.`);
+    }
+    // Completamos con huecos si la fila se queda corta.
+    while (valores.length < ids.length) {
+      valores.push('');
+    }
+    return { timestamp: String(i + 1), valores };
+  });
+
+  if (filasTabla.length === 0) {
+    throw new Error(`${nombreFichero}: el CSV no tiene filas con datos.`);
+  }
+  return { columnaTimestamp: COLUMNA_REGISTRO, ids, filas: filasTabla, sinFecha: true };
+}
+
+/**
  * Lee un CSV ya pivotado (por ejemplo un 2_fusionado.csv) para usarlo
  * directamente en el CIF (paso 4). El separador (';' o ',') lo detecta PapaParse.
+ * Con sinFecha, el CSV no tiene columna de fecha (ver filasSinFecha).
  *
  * Aquí no se lee por trozos: un CSV pivotado no lleva la columna "names"
  * y ocupa mucho menos que el de formato largo.
  */
-export function leerCsvPivotado(fichero: File): Promise<TablaPivotada> {
+export function leerCsvPivotado(fichero: File, sinFecha = false): Promise<TablaPivotada> {
   return new Promise((resolve, reject) => {
     Papa.parse<string[]>(fichero, {
       // Sin header: así cada fila llega como array y respetamos el orden
@@ -183,7 +244,7 @@ export function leerCsvPivotado(fichero: File): Promise<TablaPivotada> {
         // Si el fichero tiene un formato raro, filasATablaPivotada lanza
         // un error, y lo pasamos a la promesa.
         try {
-          resolve(filasATablaPivotada(resultado.data, fichero.name));
+          resolve(filasATablaPivotada(resultado.data, fichero.name, sinFecha));
         } catch (e) {
           reject(e);
         }

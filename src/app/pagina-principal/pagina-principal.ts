@@ -108,6 +108,8 @@ export class PaginaPrincipal {
 
   /** Tipo de CSV que se va a cargar. */
   protected origen: OrigenDatos = 'largo';
+  /** Solo con 'pivotado': el CSV no tiene columna de fecha; cada fila es un número de registro. */
+  protected sinFecha = false;
   /** Nombres de las columnas (enlazados al formulario con ngModel). */
   protected parametros: ParametrosColumnas = { ...PARAMETROS_POR_DEFECTO };
   /** Cómo rellenar los huecos de la tabla fusionada. */
@@ -172,9 +174,18 @@ export class PaginaPrincipal {
       ? (this.tablaCargada()?.columnaTimestamp ?? '')
       : (this.parametrosLeidos()?.timestamp ?? ''),
   );
-  /** Las operaciones pedidas, con las del artículo montadas sobre el timestamp. */
+  /** false si los datos leídos son una tabla sin columna de fecha (filas por número de registro). */
+  protected readonly tieneFecha = computed(
+    () => !(this.origenProcesado() === 'pivotado' && this.tablaCargada()?.sinFecha),
+  );
+  /**
+   * Las operaciones pedidas. Por defecto, las del artículo montadas sobre el
+   * timestamp; sin fecha no hay de dónde sacar DD, MM, HH y MIN, y no hay ninguna.
+   */
   protected readonly operacionesPedidas = computed(
-    () => this.operaciones() ?? procesadoDelArticulo(this.columnaTimestamp()),
+    () =>
+      this.operaciones() ??
+      (this.tieneFecha() ? procesadoDelArticulo(this.columnaTimestamp()) : []),
   );
   /** Ajustes de la estimación de hiperparámetros y su último resultado. */
   protected readonly ajustesEstimacion = signal<ParametrosEstimacion>({
@@ -409,7 +420,7 @@ export class PaginaPrincipal {
     this.limpiarResultados();
 
     try {
-      const tablaCargada = await leerCsvPivotado(ficheros[0]);
+      const tablaCargada = await leerCsvPivotado(ficheros[0], this.sinFecha);
       this.tablaCargada.set(tablaCargada);
       this.origenProcesado.set('pivotado');
       this.prepararPivotado(tablaCargada);
@@ -475,7 +486,7 @@ export class PaginaPrincipal {
     this.error.set(null);
     this.fusion.set(null);
     this.columnasBase.set(cargada.ids);
-    const preparacion = this.preparacionPara(cargada.columnaTimestamp);
+    const preparacion = this.preparacionPara(cargada.columnaTimestamp, cargada.sinFecha);
     try {
       this.fusion.set(prepararTablaPivotada(cargada, this.relleno, this.valorRelleno, preparacion));
     } catch (e) {
@@ -486,10 +497,14 @@ export class PaginaPrincipal {
     this.preparacionProcesada.set(preparacion);
   }
 
-  /** La preparación del formulario, con las operaciones del artículo si no se han cambiado. */
-  private preparacionPara(columnaTimestamp: string): Preparacion {
+  /**
+   * La preparación del formulario, con las operaciones del artículo si no se han
+   * cambiado (ninguna si la tabla no tiene fecha).
+   */
+  private preparacionPara(columnaTimestamp: string, sinFecha = false): Preparacion {
     return {
-      operaciones: this.operaciones() ?? procesadoDelArticulo(columnaTimestamp),
+      operaciones:
+        this.operaciones() ?? (sinFecha ? [] : procesadoDelArticulo(columnaTimestamp)),
       diccionario: this.diccionarioEntrada(),
     };
   }
@@ -673,6 +688,7 @@ export class PaginaPrincipal {
       fecha: new Date().toISOString(),
       ficheros: this.ficheros().map((f) => f.name),
       origen: this.origenProcesado(),
+      sinFecha: !this.tieneFecha(),
       columnas: this.parametrosLeidos() ?? { ...this.parametros },
       filtro: this.filtro(),
       // Las operaciones que se usaron y el diccionario que salió de la tabla, para que
@@ -680,7 +696,7 @@ export class PaginaPrincipal {
       preparacion: {
         operaciones:
           this.preparacionProcesada()?.operaciones ??
-          this.preparacionPara(this.parametros.timestamp).operaciones,
+          this.preparacionPara(this.parametros.timestamp, !this.tieneFecha()).operaciones,
         diccionario: this.fusion()?.diccionario ?? this.diccionarioEntrada(),
       },
       relleno: this.rellenoProcesado() ?? { modo: this.relleno, valor: this.valorRelleno },
@@ -735,11 +751,16 @@ export class PaginaPrincipal {
         (c.columnas === null ||
           JSON.stringify(c.columnas) === JSON.stringify(this.parametrosLeidos()));
       // Con un CSV pivotado ya leído, tampoco: se vuelve a preparar y rellenar.
+      // Si cambia "sin columna de fecha", hay que volver a leerlo.
       const cargada = this.tablaCargada();
       const puedeRepreparar =
-        cargada !== null && this.origenProcesado() === 'pivotado' && c.origen === 'pivotado';
+        cargada !== null &&
+        this.origenProcesado() === 'pivotado' &&
+        c.origen === 'pivotado' &&
+        (cargada.sinFecha === true) === c.sinFecha;
 
       this.origen = c.origen;
+      this.sinFecha = c.sinFecha;
       if (c.columnas) {
         this.parametros = { ...c.columnas };
       }

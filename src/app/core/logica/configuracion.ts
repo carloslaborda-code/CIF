@@ -31,6 +31,11 @@ export interface ConfiguracionCif {
   ficheros: string[];
   /** Tipo de CSV: formato largo o ya pivotado. */
   origen: 'largo' | 'pivotado';
+  /**
+   * Solo con 'pivotado': true si el CSV no tiene columna de fecha y las filas se
+   * identifican por su número de registro. false en ficheros antiguos.
+   */
+  sinFecha: boolean;
   /** Nombres de las columnas del CSV largo. null en ficheros antiguos (se deja el formulario como está). */
   columnas: ParametrosColumnas | null;
   /** Filtro de lecturas por tipo, sensor y aulario (solo formato largo). */
@@ -199,6 +204,7 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     fecha: String(d.fecha ?? ''),
     ficheros: Array.isArray(d.ficheros) ? d.ficheros.map(String) : [],
     origen: d.origen === 'pivotado' ? 'pivotado' : 'largo',
+    sinFecha: d.origen === 'pivotado' && d.sinFecha === true,
     columnas,
     filtro,
     preparacion,
