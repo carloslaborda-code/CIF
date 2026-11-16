@@ -46,7 +46,12 @@ import {
   FiltroLecturas,
   SIN_FILTRO,
 } from '../core/logica/filtrar';
-import { leerCsvPivotado, leerVariosCsv } from '../core/logica/leer-csv';
+import {
+  avisoDeHuecos,
+  leerCsvPivotado,
+  leerVariosCsv,
+  registrosIncompletos,
+} from '../core/logica/leer-csv';
 import {
   Lectura,
   PARAMETROS_POR_DEFECTO,
@@ -192,6 +197,8 @@ export class PaginaPrincipal {
     ...ESTIMACION_POR_DEFECTO,
   });
   protected readonly estimacion = signal<ResultadoEstimacion | null>(null);
+  /** Por qué no se ha guardado el dataset en columnas (le faltan datos), o null. */
+  protected readonly avisoDataset = signal<string | null>(null);
   /** Aviso que sale al aplicar los valores estimados. */
   protected readonly avisoAplicado = signal<string | null>(null);
   /** true mientras se calcula el CIF. */
@@ -319,6 +326,7 @@ export class PaginaPrincipal {
     this.etiquetas.set({});
     this.tabla.set(null);
     this.fusion.set(null);
+    this.avisoDataset.set(null);
     this.quitarCalculos();
     this.error.set(null);
   }
@@ -449,6 +457,8 @@ export class PaginaPrincipal {
     // Lo de antes ya no vale; las lecturas sí, para poder cambiar el filtro.
     this.tabla.set(null);
     this.fusion.set(null);
+    // Con otro filtro el dataset es otro: el aviso de antes ya no vale.
+    this.avisoDataset.set(null);
     this.quitarCalculos();
     this.error.set(null);
 
@@ -585,6 +595,8 @@ export class PaginaPrincipal {
   /**
    * Descarga el dataset en columnas (con el filtro aplicado) para cargarlo la próxima
    * vez como "Una tabla ya hecha" sin tener que pivotar otra vez el CSV largo.
+   * Si le faltan datos no se guarda, porque no se podría volver a cargar: se avisa
+   * de en qué registros, con el mismo mensaje que al cargarlo.
    */
   protected descargarDataset(): void {
     const p = this.parametrosLeidos();
@@ -592,7 +604,19 @@ export class PaginaPrincipal {
       return;
     }
     const lecturas = aplicarFiltro(this.lecturas() ?? [], this.filtro());
-    this.guardarFichero(tablaACsv(datasetEnColumnas(lecturas, p.timestamp)), 'dataset.csv');
+    const dataset = datasetEnColumnas(lecturas, p.timestamp);
+    const incompletos = registrosIncompletos(
+      dataset.filas.map((f) => f.valores),
+      dataset.ids,
+    );
+    if (incompletos.length > 0) {
+      const aviso = avisoDeHuecos('dataset.csv', incompletos);
+      this.avisoDataset.set(aviso);
+      this.anuncio.set(aviso);
+      return;
+    }
+    this.avisoDataset.set(null);
+    this.guardarFichero(tablaACsv(dataset), 'dataset.csv');
   }
 
   /** Descarga columnas.csv: el tipo, uid y aulario de cada columna de la tabla fusionada. */

@@ -106,13 +106,105 @@ export async function leerVariosCsv(ficheros: File[], p: ParametrosColumnas): Pr
 // CSV ya pivotado
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Celdas vacías
+// ---------------------------------------------------------------------------
+
+/** Un registro (fila de datos, desde 1) al que le faltan datos, y en qué columnas. */
+export interface RegistroIncompleto {
+  registro: number;
+  columnas: string[];
+}
+
+/** Cuántos registros incompletos se nombran en el aviso, y cuántas columnas de cada uno. */
+const REGISTROS_EN_AVISO = 10;
+const COLUMNAS_EN_AVISO = 3;
+
+/**
+ * Los registros con alguna celda vacía. `filas` son las filas de datos (sin la
+ * cabecera), ya recortadas y completadas hasta el número de columnas; `nombres`,
+ * el nombre de cada columna. El registro 1 es la primera fila de datos.
+ */
+export function registrosIncompletos(filas: string[][], nombres: string[]): RegistroIncompleto[] {
+  const incompletos: RegistroIncompleto[] = [];
+  filas.forEach((fila, i) => {
+    const columnas = nombres.filter((_, c) => fila[c] === '');
+    if (columnas.length > 0) {
+      incompletos.push({ registro: i + 1, columnas });
+    }
+  });
+  return incompletos;
+}
+
+/**
+ * Mensaje para cuando faltan datos: el total y los primeros registros
+ * ("En el registro 42589 faltan datos (columna X)."), uno por línea.
+ */
+export function avisoDeHuecos(nombreFichero: string, incompletos: RegistroIncompleto[]): string {
+  const celdas = incompletos.reduce((n, r) => n + r.columnas.length, 0);
+  const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
+  const lineas = incompletos.slice(0, REGISTROS_EN_AVISO).map(({ registro, columnas }) => {
+    const nombres = columnas.slice(0, COLUMNAS_EN_AVISO).map((c) => `"${c}"`).join(', ');
+    const resto = columnas.length - COLUMNAS_EN_AVISO;
+    const cuales =
+      columnas.length === 1
+        ? `columna ${nombres}`
+        : `columnas ${nombres}${resto > 0 ? ` y ${resto} más` : ''}`;
+    return `En el registro ${registro} faltan datos (${cuales}).`;
+  });
+  const quedan = incompletos.length - REGISTROS_EN_AVISO;
+  if (quedan > 0) {
+    lineas.push(`… y ${plural(quedan, 'registro más', 'registros más')}.`);
+  }
+  return [
+    `${nombreFichero}: faltan datos en ${plural(incompletos.length, 'registro', 'registros')} ` +
+      `(${plural(celdas, 'celda vacía', 'celdas vacías')}). Isolation Forest no puede ejecutarse ` +
+      'si faltan datos: trata los nulos antes de cargar el CSV.',
+    ...lineas,
+  ].join('\n');
+}
+
+/**
+ * Prepara las filas de datos de un CSV ya pivotado: recorta los espacios, quita
+ * las filas vacías del final (Excel a veces deja ";;;" al exportar) y completa
+ * con '' las filas cortas. Lanza un error si una fila tiene más celdas que la
+ * cabecera o si falta algún dato, diciendo en qué registros.
+ */
+function filasCompletas(datos: string[][], nombres: string[], nombreFichero: string): string[][] {
+  const filas = datos.map((fila) => fila.map((c) => c.trim()));
+  while (filas.length > 0 && filas[filas.length - 1].every((c) => c === '')) {
+    filas.pop();
+  }
+  filas.forEach((fila, i) => {
+    if (fila.length > nombres.length) {
+      throw new Error(`${nombreFichero}: el registro ${i + 1} tiene más columnas que la cabecera.`);
+    }
+    while (fila.length < nombres.length) {
+      fila.push('');
+    }
+  });
+  if (filas.length === 0) {
+    throw new Error(`${nombreFichero}: el CSV no tiene filas con datos.`);
+  }
+  const incompletos = registrosIncompletos(filas, nombres);
+  if (incompletos.length > 0) {
+    throw new Error(avisoDeHuecos(nombreFichero, incompletos));
+  }
+  return filas;
+}
+
+// ---------------------------------------------------------------------------
+// De filas a tabla
+// ---------------------------------------------------------------------------
+
 /**
  * Convierte las filas de un CSV ya pivotado (cabecera incluida) en una TablaPivotada.
  * La primera columna es el timestamp y el resto son las columnas de datos.
  *
  * - Las filas se quedan en el orden del fichero (se supone que ya van por tiempo).
- * - Las filas sin timestamp se descartan, como en el formato largo.
- * - Si a una fila le faltan celdas al final, se completan con '' (huecos).
+ * - No puede faltar ningún dato, tampoco el timestamp: si hay celdas vacías o
+ *   filas cortas, es un error que dice en qué registros (ver filasCompletas).
+ *   Los nulos se tratan antes de cargar el CSV.
  * - Es un error que una fila tenga más celdas que la cabecera, que haya
  *   columnas o timestamps repetidos, o que no haya ninguna fila con datos.
  *
@@ -145,34 +237,17 @@ export function filasATablaPivotada(
   }
 
   const timestampsVistos = new Set<string>();
-  const filasTabla: FilaPivotada[] = [];
-  for (let i = 0; i < datos.length; i++) {
-    const celdas = datos[i].map((c) => c.trim());
-    // +2 porque i empieza en 0 y la línea 1 es la cabecera.
-    const linea = i + 2;
-    if (celdas.length > nombres.length) {
-      throw new Error(`${nombreFichero}: la línea ${linea} tiene más columnas que la cabecera.`);
-    }
-    const [timestamp, ...valores] = celdas;
-    if (!timestamp) {
-      continue;
-    }
-    if (timestampsVistos.has(timestamp)) {
-      throw new Error(
-        `${nombreFichero}: el timestamp "${timestamp}" está repetido (línea ${linea}).`,
-      );
-    }
-    timestampsVistos.add(timestamp);
-    // Completamos con huecos si la fila se queda corta.
-    while (valores.length < ids.length) {
-      valores.push('');
-    }
-    filasTabla.push({ timestamp, valores });
-  }
-
-  if (filasTabla.length === 0) {
-    throw new Error(`${nombreFichero}: el CSV no tiene filas con datos.`);
-  }
+  const filasTabla: FilaPivotada[] = filasCompletas(datos, nombres, nombreFichero).map(
+    ([timestamp, ...valores], i) => {
+      if (timestampsVistos.has(timestamp)) {
+        throw new Error(
+          `${nombreFichero}: el timestamp "${timestamp}" está repetido (registro ${i + 1}).`,
+        );
+      }
+      timestampsVistos.add(timestamp);
+      return { timestamp, valores };
+    },
+  );
   return { columnaTimestamp, ids, filas: filasTabla };
 }
 
@@ -182,8 +257,9 @@ export function filasATablaPivotada(
  * empieza en 1 en la primera fila después de la cabecera. Ese número va en el
  * timestamp de la fila, y la columna se llama COLUMNA_REGISTRO.
  *
- * Como no hay timestamp, no se descarta ninguna fila (las líneas en blanco ya
- * las salta PapaParse) y no se miran repetidos.
+ * Como no hay timestamp, no se miran repetidos. Las líneas en blanco ya las
+ * salta PapaParse y no cuentan como registro. Igual que con fecha, no puede
+ * faltar ningún dato (ver filasCompletas).
  */
 function filasSinFecha(filas: string[][], nombreFichero: string): TablaPivotada {
   const [cabecera, ...datos] = filas;
@@ -207,21 +283,9 @@ function filasSinFecha(filas: string[][], nombreFichero: string): TablaPivotada 
     );
   }
 
-  const filasTabla: FilaPivotada[] = datos.map((fila, i) => {
-    const valores = fila.map((c) => c.trim());
-    if (valores.length > ids.length) {
-      throw new Error(`${nombreFichero}: el registro ${i + 1} tiene más columnas que la cabecera.`);
-    }
-    // Completamos con huecos si la fila se queda corta.
-    while (valores.length < ids.length) {
-      valores.push('');
-    }
-    return { timestamp: String(i + 1), valores };
-  });
-
-  if (filasTabla.length === 0) {
-    throw new Error(`${nombreFichero}: el CSV no tiene filas con datos.`);
-  }
+  const filasTabla: FilaPivotada[] = filasCompletas(datos, ids, nombreFichero).map(
+    (valores, i) => ({ timestamp: String(i + 1), valores }),
+  );
   return { columnaTimestamp: COLUMNA_REGISTRO, ids, filas: filasTabla, sinFecha: true };
 }
 

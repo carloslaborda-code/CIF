@@ -241,7 +241,7 @@
           }
 
           @if (error(); as mensaje) {
-            <p class="aviso-error" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
+            <p class="aviso-error whitespace-pre-line" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
           }
         </section>
 
@@ -263,7 +263,7 @@
     <!-- ================================================================== -->
     @case (2) {
       @if (error(); as mensaje) {
-        <p class="aviso-error" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
+        <p class="aviso-error whitespace-pre-line" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
       }
 
       <!-- Procesado de características y codificación (3.1.1 y 3.1.2 del artículo).
@@ -370,9 +370,12 @@
               </div>
               <p class="text-sm text-slate-600">
                 La próxima vez cárgalo como «Una tabla ya hecha» y no hará falta volver a pivotar.
-                Va sin preparar y con los huecos vacíos, así que podrás elegir otra vez cómo
-                prepararlo.
+                Va sin preparar, así que podrás elegir otra vez cómo prepararlo. Solo se guarda si
+                no le faltan datos.
               </p>
+              @if (avisoDataset(); as aviso) {
+                <p class="aviso-error whitespace-pre-line" role="alert"><strong>No se ha guardado:</strong> {{ aviso }}</p>
+              }
             </div>
           }
 
@@ -666,7 +669,7 @@
           </section>
 
           @if (errorCif(); as mensaje) {
-            <p class="aviso-error" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
+            <p class="aviso-error whitespace-pre-line" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
           }
 
           <div class="flex flex-wrap items-center justify-between gap-3">
