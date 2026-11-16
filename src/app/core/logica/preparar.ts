@@ -269,9 +269,29 @@ export function procesarCaracteristicas(
 /** Diccionario de la codificación: valor de texto → número. */
 export type Diccionario = Record<string, number>;
 
+/**
+ * Convierte el texto de una celda en número. Devuelve NaN si no lo es (y si
+ * está vacío: Number('') daría 0).
+ *
+ * Acepta la coma decimal, porque Excel en español exporta así los CSV
+ * (12,5 o 1,72E-02): si hay una sola coma y ningún punto, la coma es el
+ * decimal. No hay separador de miles: "1.234,5" no es un número. Los formatos
+ * del Excel de los datos (General y 0.0000) no lo usan.
+ */
+export function aNumero(texto: string): number {
+  let t = texto.trim();
+  if (t === '') {
+    return NaN;
+  }
+  if (!t.includes('.') && t.indexOf(',') === t.lastIndexOf(',')) {
+    t = t.replace(',', '.');
+  }
+  return Number(t);
+}
+
 /** true si el texto es un número (el vacío no cuenta: es un hueco). */
 export function esNumero(texto: string): boolean {
-  return texto.trim() !== '' && Number.isFinite(Number(texto));
+  return Number.isFinite(aNumero(texto));
 }
 
 /** Comprueba un diccionario cargado. Devuelve un mensaje de error, o null si está bien. */

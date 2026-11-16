@@ -12,6 +12,7 @@
  */
 import { iForest } from '../lib/isolation-forest';
 import type { TablaPivotada } from './pivotar';
+import { aNumero } from './preparar';
 import { conSemilla, semillaAleatoria, validarSemilla } from './semilla';
 
 // ---------------------------------------------------------------------------
@@ -110,10 +111,10 @@ export function tablaAPuntos(tabla: TablaPivotada): {
   let celdasNoNumericas = 0;
   const puntos = tabla.filas.map((fila) =>
     fila.valores.map((texto) => {
-      const numero = Number(texto);
-      // Number('') da 0 y no NaN, por eso el vacío lo comprobamos aparte.
-      // Si no, una celda vacía contaría como un 0 "de verdad" y no saldría en el aviso.
-      if (texto.trim() === '' || !Number.isFinite(numero)) {
+      // aNumero acepta la coma decimal y da NaN para el vacío (Number('') daría 0
+      // y la celda vacía contaría como un 0 "de verdad" sin salir en el aviso).
+      const numero = aNumero(texto);
+      if (!Number.isFinite(numero)) {
         celdasNoNumericas++;
         return 0;
       }
