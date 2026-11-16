@@ -336,6 +336,22 @@
             contador puede parecer una anomalía.
           </p>
 
+          <!-- Para no tener que pivotar el CSV largo cada vez. Solo tiene sentido con CSV largo -->
+          @if (lecturas()) {
+            <div class="flex flex-col gap-1">
+              <div>
+                <button type="button" class="btn-secundario" (click)="descargarDataset()">
+                  Guardar el dataset en columnas (dataset.csv)
+                </button>
+              </div>
+              <p class="text-sm text-slate-600">
+                La próxima vez cárgalo como «Una tabla ya hecha» y no hará falta volver a pivotar.
+                Va sin preparar y con los huecos vacíos, así que podrás elegir otra vez cómo
+                prepararlo.
+              </p>
+            </div>
+          }
+
           <!-- Las tablas, plegadas: se miran solo si hace falta -->
           <details class="plegable">
             <summary>Ver la tabla y descargarla</summary>

@@ -297,6 +297,25 @@ export function prepararTablaPivotada(
 }
 
 /**
+ * El dataset en columnas para guardarlo y cargarlo otra vez como "tabla ya hecha":
+ * separado por tipo y alineado (columnas tipo_id), pero sin procesado, sin codificar
+ * y con los huecos vacíos. Al cargarlo, el paso 2 hace lo mismo que con el CSV largo.
+ *
+ * No sirve 2_fusionado.csv, porque ya está preparado (se añadiría DD otra vez), ni
+ * 1_pivotado.csv, porque no lleva el tipo en el nombre de las columnas.
+ */
+export function datasetEnColumnas(lecturas: Lectura[], columnaTimestamp: string): TablaPivotada {
+  const { ids, filas } = fusionar(
+    lecturas,
+    columnaTimestamp,
+    'vacio',
+    VALOR_RELLENO_POR_DEFECTO,
+    SIN_PREPARACION,
+  );
+  return { columnaTimestamp, ids, filas };
+}
+
+/**
  * Columnas que tendrá la tabla fusionada antes del procesado de características
  * (tipo_id, en el mismo orden que fusionar). Sirve para elegir columnas en las
  * operaciones aunque la última preparación haya dado error.

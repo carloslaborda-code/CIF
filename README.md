@@ -24,7 +24,7 @@ Abre http://localhost:4200. La aplicación es un asistente de cinco pasos; la ba
 
 1. **Datos.** Elige cómo vienen los datos y los ficheros:
    - **Formato largo:** uno o varios CSV con una fila por lectura. Se pivotan y se fusionan por tipo.
-   - **Ya pivotado:** un solo CSV con una fila por momento y una columna por sensor (por ejemplo, un `2_fusionado.csv`). No se pivota ni se fusiona, pero sí pasa por la preparación de datos del paso 2.
+   - **Ya pivotado:** un solo CSV con una fila por momento y una columna por sensor (por ejemplo, el `dataset.csv` que se guarda en el paso 2). No se pivota ni se fusiona, pero sí pasa por la preparación de datos del paso 2. Un `2_fusionado.csv` ya viene preparado: si se vuelve a cargar con el procesado por defecto, da error porque ya tiene la columna `DD`.
 2. **Preparar.** Procesado de características y codificación (ver «Preparación de datos»), relleno de huecos y revisión de la tabla resultante. Si quieres, filtra las lecturas por tipo de medida (`name`), aulario (`alias`) o sensor (`uid`). Nada de esto vuelve a leer el CSV.
 3. **Contextos.** Un contexto es una forma de mirar la instalación (por tipo, por edificio…) y sus particiones son los grupos de sensores que salen al mirarla así. Se pueden crear a mano o con «Contexto automático por tipo de medida». Sin contextos solo se calcula el IF global, sin RI ni II.
 4. **Ajustes.** Parámetros del Isolation Forest y semilla. Con «Estimar árboles y umbral» la herramienta propone esos dos valores para tus datos (ver más abajo) y tú decides si los usas.
@@ -140,6 +140,7 @@ La estimación funciona mejor cuando los registros normales tienen valores en la
 
 | Fichero | Dónde | Contenido |
 |---|---|---|
+| `dataset.csv` | Paso 2 (solo con CSV largo) | El dataset en columnas para volver a cargarlo como «Una tabla ya hecha» sin pivotar otra vez: columnas `tipo_uid`, con el filtro aplicado, sin procesado ni codificación y con los huecos vacíos. Al cargarlo da lo mismo que el CSV largo |
 | `1_pivotado.csv` | Paso 2 | Una fila por momento y una columna por sensor, sin separar por tipo |
 | `2_fusionado.csv` | Paso 2 | La tabla que se analiza: columnas `tipo_uid` (p. ej. `electricityfacility_6339567`) más las del procesado, ya codificadas y con los huecos rellenos. Se puede cargar directamente en el visualizador de Emilia |
 | `columnas.csv` | Paso 2 | Qué sensor y qué aulario hay detrás de cada columna |
@@ -148,7 +149,7 @@ La estimación funciona mejor cuando los registros normales tienen valores en la
 | `4_cif_particiones_semilla-N.csv` | Paso 5 | Resumen por partición |
 | `configuracion_semilla-N.json` | Arriba o paso 5 | Columnas, filtro, procesado de características, diccionario, relleno, parámetros, semilla, contextos, ajustes de la estimación y cortes. Los JSON antiguos siguen funcionando: si no traen procesado, no se procesa nada, para repetir el resultado de entonces |
 
-`1_pivotado.csv` y `2_fusionado.csv` usan el formato del visualizador de Emilia: separador `;` y fecha `DD/MM/YYYY HH:MM:SS`, con la hora tal cual viene en el CSV de entrada. Los CSV de datos no llevan metadatos para no romper ese formato; la semilla va en el nombre del fichero y en el JSON.
+`dataset.csv`, `1_pivotado.csv` y `2_fusionado.csv` usan el formato del visualizador de Emilia: separador `;` y fecha `DD/MM/YYYY HH:MM:SS`, con la hora tal cual viene en el CSV de entrada. Los CSV de datos no llevan metadatos para no romper ese formato; la semilla va en el nombre del fichero y en el JSON.
 
 ## Estructura
 

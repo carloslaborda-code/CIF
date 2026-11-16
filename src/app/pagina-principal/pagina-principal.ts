@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import {
   columnasFusionadas,
+  datasetEnColumnas,
   fusionar,
   ModoRelleno,
   OPCIONES_RELLENO,
@@ -564,6 +565,19 @@ export class PaginaPrincipal {
   // Se usa para 1_pivotado.csv y 2_fusionado.csv, que tienen el mismo formato.
   protected descargar(tabla: TablaPivotada, nombreFichero: string): void {
     this.guardarFichero(tablaACsv(tabla), nombreFichero);
+  }
+
+  /**
+   * Descarga el dataset en columnas (con el filtro aplicado) para cargarlo la próxima
+   * vez como "Una tabla ya hecha" sin tener que pivotar otra vez el CSV largo.
+   */
+  protected descargarDataset(): void {
+    const p = this.parametrosLeidos();
+    if (!p) {
+      return;
+    }
+    const lecturas = aplicarFiltro(this.lecturas() ?? [], this.filtro());
+    this.guardarFichero(tablaACsv(datasetEnColumnas(lecturas, p.timestamp)), 'dataset.csv');
   }
 
   /** Descarga columnas.csv: el tipo, uid y aulario de cada columna de la tabla fusionada. */
