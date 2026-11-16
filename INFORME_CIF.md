@@ -1,8 +1,8 @@
 # Herramienta CIF: estado, decisiones y siguientes pasos
 
-**Carlos Laborda Martínez** · 15 de noviembre de 2026
+**Carlos Laborda Martínez** · 16 de noviembre de 2026
 
-Implementación del método del artículo *Contextual Isolation Forests: Contextual anomaly detection in water distribution networks using semantic partitioning* (Saavedra, Arnau, Berna y Calatayud). La herramienta es general: sirve para cualquier conjunto de sensores en CSV. Se ha probado con los datos de agua y electricidad de la Universidad de Alicante. El código está en la carpeta [`cif/`](cif/).
+Implementación del método del artículo *Contextual Isolation Forests: Contextual anomaly detection in water distribution networks using semantic partitioning* (Saavedra, Arnau, Berna y Calatayud). La herramienta es general: sirve para cualquier conjunto de sensores en CSV. Se ha probado con los datos de agua y electricidad de la Universidad de Alicante. El código está en la carpeta [`cif/`](./).
 
 ---
 
@@ -18,7 +18,7 @@ Implementación del método del artículo *Contextual Isolation Forests: Context
 - **Ya hay datos suficientes:** 3 meses (enero–marzo de 2026, cada 15 minutos) de agua y electricidad. El subconjunto de registros normales es el 20 % de la tabla, como pide el artículo. La exportación de producción solar venía vacía y no se ha usado.
 - **Con contadores de consumo, la estimación del artículo no da valores fiables, y no es por falta de datos.** Los registros más normales son sobre todo de noche, con valores cerca de 0. Subirlos un 50 % los mueve solo un 1 % (agua) o un 4 % (electricidad) del rango de su columna, y el Isolation Forest no los distingue: encuentra 1 de los 17 registros contaminados. Las variables del artículo (niveles, caudales, presiones) no tienen ese problema. La herramienta lo avisa y no cambia el método (P9).
 
-### Cambios desde el informe anterior (esta misma fecha, por la mañana)
+### Cambios desde el informe anterior 
 
 | Antes | Ahora |
 |---|---|
@@ -29,6 +29,7 @@ Implementación del método del artículo *Contextual Isolation Forests: Context
 | 74 pruebas | 89 pruebas |
 | Mapa RI–II: etiquetas que se pisaban, normales y límite mezclados en el origen | Corregido (D23) |
 | Textos de la pantalla citando "el artículo" | Hablan de "valores por defecto" |
+| Sin licencia | Licencia MIT. La librería de Emilia queda fuera, incluida con su permiso y citándola (D24) |
 
 ---
 
@@ -118,7 +119,7 @@ Hay 89 pruebas automáticas en `cif/pruebas/`. Se ejecutan con `npm test` en uno
 | **A · Fórmulas** | Se meten los valores por partición de las 10 filas de la Tabla 5 del artículo | Las 10 filas dan el mismo RI, II y anomalía sí/no que el artículo |
 | **B · Montaje** | Cada partición ve solo sus columnas; la misma semilla da el mismo resultado; las columnas constantes se quitan bien; las validaciones funcionan | Todas correctas |
 | **C · Red simulada** | Una red como la del artículo (4 zonas × 4 medidas = 16 sensores, 2.000 momentos) con 20 averías de un solo sensor y una de toda la red, repetida con 5 semillas | Con 100 árboles: **98 de 100** averías señaladas en sus particiones, **0 de 600** en particiones ajenas y **0 de 9.895** momentos normales marcados por error. La avería de toda la red sale la primera, con RI entre 0,75 y 1 |
-| **D · Comparación de motores** | El IF de Emilia frente a un IF hecho por separado ([`isolation-forest-propio/`](isolation-forest-propio/)) sobre los mismos datos (`npm run comparar`) | Con el consumo de agua real ordenan los momentos igual (correlación 0,96, la misma que cada motor consigo mismo con otra semilla). Aquí apareció el fallo de las columnas constantes (D7) |
+| **D · Comparación de motores** | El IF de Emilia frente a un IF hecho por separado ([`isolation-forest-propio/`](../isolation-forest-propio/)) sobre los mismos datos (`npm run comparar`) | Con el consumo de agua real ordenan los momentos igual (correlación 0,96, la misma que cada motor consigo mismo con otra semilla). Aquí apareció el fallo de las columnas constantes (D7) |
 | **E · Filtro y configuración** | El filtro por tipo, sensor y aulario; que el JSON guardado se lea igual; que los JSON antiguos sigan funcionando, también los de antes de la estimación y de la preparación | Todo correcto |
 | **F · Estimación y clasificación** | Las piezas de la estimación; el procedimiento 2 entero en una red estable; la clasificación de las filas de la Tabla 5 | En la red estable: DE del 20 %, F1 = 1,00, 36 árboles y umbral 0,48, estable desde el 40 %. Las filas de la Tabla 5 se clasifican igual que en el artículo |
 | **G · Preparación de datos** | Lectura de fechas; las cuatro operaciones del procesado; la codificación (solo columnas cualitativas, diccionario de entrada, mismo resultado con la misma entrada); el orden de la Fig. 1 con CSV largo y pivotado | Todas correctas. De `DD/MM/YYYY HH:MIN` salen DD, MM, HH y MIN como en 4.2.1 |
@@ -227,6 +228,7 @@ La lectura del CSV y la estimación avanzan por trozos y no bloquean la pantalla
 | **D21** | Una columna es cualitativa si tiene algún valor que no es un número, y entonces se codifican todos sus valores. El diccionario es único para toda la tabla y los códigos empiezan en 1 | El artículo usa un único diccionario (4.2.2) y no dice qué hacer con columnas mixtas. Codificarlo todo evita confundir un código con un número real. Empezar en 1 evita confundirlo con el 0 de los huecos rellenados | Codificar solo los valores de texto; empezar en 0 |
 | **D22** | Un JSON de configuración anterior a la preparación de datos no procesa nada | Así repite exactamente el resultado que dio cuando se guardó | Aplicarle el procesado por defecto |
 | **D23** | En el mapa RI–II, los registros de clases distintas que caen en el mismo punto van en burbujas distintas. Las etiquetas "×N" que se pisarían no se escriben (el número sigue en el recuadro y en la tabla) y hay un margen alrededor para no tapar los ejes | Con muchos registros en el origen se mezclaban normales y límite en una sola burbuja amarilla, y las etiquetas no se podían leer | Juntar todo el punto en una burbuja del color de la clase más alta |
+| **D24** | El código se publica con **licencia MIT** (fichero `LICENSE`). La carpeta `core/lib/isolation-forest/` queda fuera de esa licencia: es de Emilia Rouanet Feliu y se incluye sin cambios, con su permiso y citándola como autora en el README | La MIT es la licencia libre más habitual en proyectos JavaScript y Angular y deja reutilizar la herramienta sin trabas. El código de Emilia no se puede relicenciar sin su permiso, y ella solo pidió que se la mencione | GPL-3.0 (obliga a publicar el código de las versiones modificadas); publicar sin licencia (nadie podría reutilizarlo legalmente) |
 
 ---
 
@@ -281,7 +283,7 @@ Dentro de `cif/`:
 | `npm run estimar -- <csv> [semilla] [características]` | Lanza la estimación por consola, con el procesado por defecto (DD, MM, HH, MIN). Por defecto, semilla 42 y 1 característica contaminada. Con `--sin-procesado` no se añaden las columnas de fecha. Ejemplo: `npm run estimar -- datasets/ConsumoElectrico3meses.csv 42 132` repite la última fila del apartado 5.4 |
 | `npm run comparar` | Compara el IF de Emilia con el IF propio (por defecto con `datasets/ConsumoAgua.csv`; otro fichero: `npm run comparar -- datasets/Solar.csv`) |
 
-Los datasets van en `cif/datasets/`. Ni los datasets ni las pruebas se suben a git.
+Los datasets van en `cif/datasets/`. Ni los datasets ni las pruebas se suben a git (D12): para repetir las pruebas hay que copiar aparte la carpeta `cif/pruebas/`, y `npm run comparar` necesita además la carpeta `isolation-forest-propio/` al lado de `cif/`.
 
 **Ficheros principales** (en `cif/src/app/core/logica/`):
 
