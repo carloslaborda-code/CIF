@@ -113,6 +113,11 @@ export async function leerVariosCsv(ficheros: File[], p: ParametrosColumnas): Pr
 /** Un registro (fila de datos, desde 1) al que le faltan datos, y en qué columnas. */
 export interface RegistroIncompleto {
   registro: number;
+  /**
+   * El timestamp de la fila, si sirve para encontrarla. Con el CSV largo el
+   * número de registro es la fila de la tabla pivotada, no la del fichero.
+   */
+  momento?: string;
   columnas: string[];
 }
 
@@ -124,43 +129,70 @@ const COLUMNAS_EN_AVISO = 3;
  * Los registros con alguna celda vacía. `filas` son las filas de datos (sin la
  * cabecera), ya recortadas y completadas hasta el número de columnas; `nombres`,
  * el nombre de cada columna. El registro 1 es la primera fila de datos.
+ * Con `momentos` (el timestamp de cada fila), cada registro lleva el suyo.
  */
-export function registrosIncompletos(filas: string[][], nombres: string[]): RegistroIncompleto[] {
+export function registrosIncompletos(
+  filas: string[][],
+  nombres: string[],
+  momentos?: string[],
+): RegistroIncompleto[] {
   const incompletos: RegistroIncompleto[] = [];
   filas.forEach((fila, i) => {
     const columnas = nombres.filter((_, c) => fila[c] === '');
     if (columnas.length > 0) {
-      incompletos.push({ registro: i + 1, columnas });
+      incompletos.push(
+        momentos ? { registro: i + 1, momento: momentos[i], columnas } : { registro: i + 1, columnas },
+      );
     }
   });
   return incompletos;
 }
 
-/**
- * Mensaje para cuando faltan datos: el total y los primeros registros
- * ("En el registro 42589 faltan datos (columna X)."), uno por línea.
- */
-export function avisoDeHuecos(nombreFichero: string, incompletos: RegistroIncompleto[]): string {
+const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
+
+/** "3 registros (5 celdas vacías)". */
+export function resumenHuecos(incompletos: RegistroIncompleto[]): string {
   const celdas = incompletos.reduce((n, r) => n + r.columnas.length, 0);
-  const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
-  const lineas = incompletos.slice(0, REGISTROS_EN_AVISO).map(({ registro, columnas }) => {
+  return (
+    `${plural(incompletos.length, 'registro', 'registros')} ` +
+    `(${plural(celdas, 'celda vacía', 'celdas vacías')})`
+  );
+}
+
+/**
+ * Una línea por cada uno de los primeros registros ("En el registro 42589
+ * faltan datos (columna X)."), y al final cuántos quedan sin nombrar.
+ */
+export function lineasDeHuecos(incompletos: RegistroIncompleto[]): string[] {
+  const lineas = incompletos.slice(0, REGISTROS_EN_AVISO).map(({ registro, momento, columnas }) => {
     const nombres = columnas.slice(0, COLUMNAS_EN_AVISO).map((c) => `"${c}"`).join(', ');
     const resto = columnas.length - COLUMNAS_EN_AVISO;
     const cuales =
       columnas.length === 1
         ? `columna ${nombres}`
         : `columnas ${nombres}${resto > 0 ? ` y ${resto} más` : ''}`;
-    return `En el registro ${registro} faltan datos (${cuales}).`;
+    const cuando = momento ? ` (${momento})` : '';
+    return `En el registro ${registro}${cuando} faltan datos (${cuales}).`;
   });
   const quedan = incompletos.length - REGISTROS_EN_AVISO;
   if (quedan > 0) {
     lineas.push(`… y ${plural(quedan, 'registro más', 'registros más')}.`);
   }
+  return lineas;
+}
+
+/** Lo que se le dice al usuario: los nulos se tratan antes de pasar el CSV a la herramienta. */
+export const CONSEJO_NULOS =
+  'Isolation Forest no puede ejecutarse si faltan datos: trata los nulos antes de cargar el CSV.';
+
+/**
+ * Mensaje para cuando faltan datos en un CSV: el total y los primeros
+ * registros, uno por línea.
+ */
+export function avisoDeHuecos(nombreFichero: string, incompletos: RegistroIncompleto[]): string {
   return [
-    `${nombreFichero}: faltan datos en ${plural(incompletos.length, 'registro', 'registros')} ` +
-      `(${plural(celdas, 'celda vacía', 'celdas vacías')}). Isolation Forest no puede ejecutarse ` +
-      'si faltan datos: trata los nulos antes de cargar el CSV.',
-    ...lineas,
+    `${nombreFichero}: faltan datos en ${resumenHuecos(incompletos)}. ${CONSEJO_NULOS}`,
+    ...lineasDeHuecos(incompletos),
   ].join('\n');
 }
 

@@ -2,9 +2,10 @@
  * Fases 3.1.1 y 3.1.2 del procedimiento 1 del artículo (preparación de datos).
  *
  * El orden es el de la Fig. 1: procesado de características → codificación →
- * valores nulos → contextos. Los nulos ya los trata fusionar.ts (rellenarHuecos)
- * y los contextos, contextos.ts; aquí van las dos primeras fases, que se aplican
- * a la tabla alineada antes de rellenar los huecos.
+ * valores nulos → contextos. Los nulos no los trata la herramienta: se tratan
+ * antes de cargar el CSV, y si falta algún dato fusionar.ts da un error. Los
+ * contextos están en contextos.ts. Aquí van las dos primeras fases, que se
+ * aplican a la tabla alineada (ya sin huecos).
  *
  * 3.1.1 Procesado de características. Una lista de operaciones (la "Config" del
  * artículo) que se aplican una detrás de otra:
@@ -32,8 +33,7 @@
  *   - Una característica es cualitativa si tiene algún valor que no es un número.
  *     Entonces se codifican todos sus valores, para que un "1" de texto no se
  *     confunda con el número 1 de otra categoría.
- *   - Los códigos empiezan en 1, para no confundirse con el 0 con que se rellenan
- *     por defecto los huecos.
+ *   - Los códigos empiezan en 1.
  */
 import * as Papa from 'papaparse';
 

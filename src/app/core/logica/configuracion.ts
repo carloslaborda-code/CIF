@@ -1,6 +1,6 @@
 /**
  * Configuración de una ejecución en JSON, para que otra persona pueda repetir
- * exactamente el mismo caso: con el mismo CSV, el mismo relleno, los mismos
+ * exactamente el mismo caso: con el mismo CSV, la misma preparación, los mismos
  * parámetros, la misma semilla y los mismos contextos sale el mismo resultado.
  *
  * Se descarga desde la página y se puede volver a cargar en ella.
@@ -9,7 +9,6 @@ import { CORTES_POR_DEFECTO, CortesClasificacion, validarCortes } from './clasif
 import type { Contexto } from './contextos';
 import { ESTIMACION_POR_DEFECTO, ParametrosEstimacion, validarEstimacion } from './estimar';
 import { CampoFiltro, FiltroLecturas, SIN_FILTRO } from './filtrar';
-import { ModoRelleno, OPCIONES_RELLENO } from './fusionar';
 import type { ParametrosColumnas } from './pivotar';
 import {
   OPCIONES_EXTRACCION,
@@ -46,7 +45,6 @@ export interface ConfiguracionCif {
    * valores nuevos), así otros datos se codifican con los mismos números.
    */
   preparacion: Preparacion;
-  relleno: { modo: ModoRelleno; valor: number };
   parametros: {
     numArboles: number;
     umbral: number;
@@ -102,10 +100,8 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     throw new Error(validarSemilla(d.semilla)!);
   }
 
-  const modos = OPCIONES_RELLENO.map((o) => o.valor);
-  if (typeof d.relleno !== 'object' || d.relleno === null || !modos.includes(d.relleno.modo)) {
-    throw new Error(`El relleno debe ser uno de: ${modos.join(', ')}.`);
-  }
+  // Los ficheros de antes traen "relleno" (cómo se rellenaban los huecos). Ya no
+  // se usa: los nulos se tratan antes de cargar el CSV. Se ignora sin dar error.
 
   if (!Array.isArray(d.contextos)) {
     throw new Error('Falta la lista de contextos.');
@@ -208,7 +204,6 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     columnas,
     filtro,
     preparacion,
-    relleno: { modo: d.relleno.modo, valor: Number(d.relleno.valor ?? 0) },
     parametros: {
       numArboles: p.numArboles,
       umbral: p.umbral,

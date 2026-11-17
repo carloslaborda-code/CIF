@@ -8,13 +8,23 @@
  *   2. Pivotar cada tipo (con la función del paso 1) y renombrar sus columnas
  *      como tipo_id, para que no se mezclen ids iguales de tipos distintos.
  *   3. Alinear: una fila por cada timestamp de cualquier tipo, y todas las columnas.
- *   4. Procesado de características y codificación (preparar.ts).
- *   5. Rellenar los huecos que quedan.
+ *   4. Comprobar que no falta ningún dato.
+ *   5. Procesado de características y codificación (preparar.ts).
  *
- * Los pasos 4 y 5 son las fases 3.1.1, 3.1.2 y 3.1.3 del artículo, en el orden de su Fig. 1.
+ * El paso 5 son las fases 3.1.1 y 3.1.2 del artículo. La fase de nulos (3.1.3) no
+ * la hace la herramienta: como dijo el tutor, los nulos se tratan antes de pasarle
+ * el CSV, y si faltan datos Isolation Forest no puede ejecutarse. Por eso, si al
+ * alinear queda algún hueco (un momento en el que un sensor no tiene lectura), se
+ * avisa de en qué registros y no se sigue.
  *
  * Esta tabla fusionada es la que luego le pasamos al CIF (paso 4).
  */
+import {
+  CONSEJO_NULOS,
+  lineasDeHuecos,
+  registrosIncompletos,
+  resumenHuecos,
+} from './leer-csv';
 import {
   compararIds,
   compararTimestamps,
@@ -24,37 +34,6 @@ import {
   TablaPivotada,
 } from './pivotar';
 import { Diccionario, Preparacion, prepararCaracteristicas, SIN_PREPARACION } from './preparar';
-
-/** Cómo rellenar las celdas vacías de la tabla fusionada. */
-export type ModoRelleno = 'fijo' | 'anterior' | 'vacio';
-
-/** Opciones para el desplegable del formulario. */
-// "valor" es lo que se guarda internamente y "texto" lo que ve el usuario en el select.
-export const OPCIONES_RELLENO: { valor: ModoRelleno; texto: string }[] = [
-  { valor: 'fijo', texto: 'Valor fijo (0 a 1)' },
-  { valor: 'anterior', texto: 'Valor anterior' },
-  { valor: 'vacio', texto: 'Dejar vacío' },
-];
-
-/** Valor con el que se rellena en el modo 'fijo' si el usuario no pone otro. */
-export const VALOR_RELLENO_POR_DEFECTO = 0;
-
-/**
- * Comprueba el valor de relleno del modo 'fijo'.
- * Devuelve un mensaje de error, o null si está bien.
- */
-export function validarRelleno(modo: ModoRelleno, valor: number): string | null {
-  // En los otros modos el valor no se usa, así que da igual lo que tenga.
-  if (modo !== 'fijo') {
-    return null;
-  }
-  // Igual que con el umbral: si se borra el input, ngModel deja null.
-  // El !(...) también pilla el NaN.
-  if (typeof valor !== 'number' || !(valor >= 0 && valor <= 1)) {
-    return 'El valor de relleno debe ser un número entre 0 y 1.';
-  }
-  return null;
-}
 
 /** Nombre que se usa cuando una fila no tiene tipo. */
 export const TIPO_DESCONOCIDO = 'sin_tipo';
@@ -76,10 +55,6 @@ export interface ResumenTipo {
  */
 export interface TablaFusionada extends TablaPivotada {
   tipos: ResumenTipo[];
-  /** Celdas vacías después de alinear (antes de rellenar). */
-  huecos: number;
-  /** Celdas que se han rellenado según el modo elegido. */
-  huecosRellenados: number;
   /** Características que ha añadido el procesado (3.1.1). */
   columnasNuevas: string[];
   /** Características cualitativas que se han codificado (3.1.2). */
@@ -90,24 +65,60 @@ export interface TablaFusionada extends TablaPivotada {
   valoresNuevos: number;
 }
 
+/** Los registros con huecos de una tabla, con su momento para poder encontrarlos. */
+function incompletosDe(tabla: TablaPivotada) {
+  return registrosIncompletos(
+    tabla.filas.map((f) => f.valores),
+    tabla.ids,
+    // Sin fecha, el momento es el propio número de registro: no aporta nada.
+    tabla.sinFecha ? undefined : tabla.filas.map((f) => f.timestamp),
+  );
+}
+
 /**
- * Procesado, codificación y relleno de huecos, en el orden de la Fig. 1 del
- * artículo. Lo comparten el CSV largo (después de alinear) y el ya pivotado.
+ * Lanza un error si a la tabla alineada le falta algún dato, diciendo en qué
+ * registros (y en qué momento, porque con el CSV largo el registro es la fila
+ * de la tabla, no la del fichero).
  */
-function prepararYRellenar(
+export function comprobarSinHuecos(alineada: TablaPivotada): void {
+  const incompletos = incompletosDe(alineada);
+  if (incompletos.length > 0) {
+    throw new Error(
+      [
+        `Faltan datos en ${resumenHuecos(incompletos)}: hay momentos en los que algún sensor ` +
+          `no tiene lectura. ${CONSEJO_NULOS}`,
+        ...lineasDeHuecos(incompletos),
+      ].join('\n'),
+    );
+  }
+}
+
+/**
+ * Comprobación, procesado y codificación, en el orden de la Fig. 1 del artículo.
+ * Lo comparten el CSV largo (después de alinear) y el ya pivotado.
+ *
+ * El procesado también puede dejar celdas vacías (por ejemplo, sacar el día de
+ * una columna que no es una fecha, o añadir una columna con valor vacío). Como
+ * el IF tampoco puede con ellas, es un error que apunta a las operaciones.
+ */
+function comprobarYPreparar(
   alineada: TablaPivotada,
-  modo: ModoRelleno,
-  valorRelleno: number,
   preparacion: Preparacion,
 ): Omit<TablaFusionada, 'tipos'> {
+  comprobarSinHuecos(alineada);
   const p = prepararCaracteristicas(alineada, preparacion);
-  // Contamos los huecos antes de rellenar, si no siempre saldría 0
-  const huecos = contarHuecos(p.tabla);
-  const { tabla, rellenados } = rellenarHuecos(p.tabla, modo, valorRelleno);
+  const incompletos = incompletosDe(p.tabla);
+  if (incompletos.length > 0) {
+    throw new Error(
+      [
+        `El procesado de características ha dejado celdas vacías en ` +
+          `${resumenHuecos(incompletos)}. Revisa las operaciones.`,
+        ...lineasDeHuecos(incompletos),
+      ].join('\n'),
+    );
+  }
   return {
-    ...tabla,
-    huecos,
-    huecosRellenados: rellenados,
+    ...p.tabla,
     columnasNuevas: p.columnasNuevas,
     columnasCodificadas: p.columnasCodificadas,
     diccionario: p.diccionario,
@@ -199,71 +210,26 @@ export function alinear(tablas: TablaPivotada[], columnaTimestamp: string): Tabl
   };
 }
 
-/** Cuenta las celdas vacías de una tabla. */
-// Lo usamos para enseñar en pantalla cuántos huecos había antes de rellenar.
-export function contarHuecos(tabla: TablaPivotada): number {
-  let huecos = 0;
-  for (const fila of tabla.filas) {
-    huecos += fila.valores.filter((v) => v === '').length;
-  }
-  return huecos;
-}
-
 /**
- * Rellena las celdas vacías según el modo y devuelve una tabla nueva
- * (no modifica la de entrada) junto con cuántas celdas se han rellenado.
- *
- * - 'fijo':     cada hueco pasa a ser `valor` (entre 0 y 1, ver validarRelleno).
- * - 'anterior': cada hueco toma el último valor conocido de su columna
- *               (las filas van ordenadas por timestamp). Si la columna empieza
- *               con huecos y no hay valor anterior, se pone "0".
- * - 'vacio':    no se toca nada.
- */
-export function rellenarHuecos(
-  tabla: TablaPivotada,
-  modo: ModoRelleno,
-  valor: number = VALOR_RELLENO_POR_DEFECTO,
-): { tabla: TablaPivotada; rellenados: number } {
-  if (modo === 'vacio') {
-    return { tabla, rellenados: 0 };
-  }
-
-  // Las celdas de la tabla son texto, así que el valor fijo también.
-  const textoFijo = String(valor);
-  let rellenados = 0;
-  // Último valor visto en cada columna (para el modo 'anterior').
-  // Empieza en '0' para cubrir el caso de que la columna arranque con huecos.
-  const ultimos: string[] = tabla.ids.map(() => '0');
-
-  // Vamos fila a fila de arriba abajo, que es el orden temporal.
-  const filas = tabla.filas.map((fila) => {
-    const valores = fila.valores.map((celda, c) => {
-      if (celda !== '') {
-        // Celda con dato: la dejamos y nos apuntamos el valor para los huecos que vengan.
-        ultimos[c] = celda;
-        return celda;
-      }
-      rellenados++;
-      return modo === 'fijo' ? textoFijo : ultimos[c];
-    });
-    return { timestamp: fila.timestamp, valores };
-  });
-
-  return { tabla: { ...tabla, filas }, rellenados };
-}
-
-/**
- * Proceso completo: divide por tipo, pivota cada tipo, alinea, procesa y codifica
- * las características y rellena huecos.
- * Es la única función de este fichero que llama la página principal.
+ * Proceso completo: divide por tipo, pivota cada tipo, alinea, comprueba que no
+ * falta ningún dato y procesa y codifica las características.
+ * Lanza un error si faltan datos (ver comprobarSinHuecos).
  */
 export function fusionar(
   lecturas: Lectura[],
   columnaTimestamp: string,
-  modo: ModoRelleno,
-  valorRelleno: number = VALOR_RELLENO_POR_DEFECTO,
   preparacion: Preparacion = SIN_PREPARACION,
 ): TablaFusionada {
+  const { tabla, tipos } = alinearPorTipo(lecturas, columnaTimestamp);
+  // 4 y 5. Comprobar, procesar y codificar
+  return { ...comprobarYPreparar(tabla, preparacion), tipos };
+}
+
+/** Pasos 1 a 3: divide por tipo, pivota cada uno y los alinea. Puede dejar huecos. */
+function alinearPorTipo(
+  lecturas: Lectura[],
+  columnaTimestamp: string,
+): { tabla: TablaPivotada; tipos: ResumenTipo[] } {
   // 1. Separar por tipo
   const porTipo = dividirPorTipo(lecturas);
 
@@ -277,41 +243,35 @@ export function fusionar(
   }
 
   // 3. Alinear todas en una sola tabla
-  const alineada = alinear(tablas, columnaTimestamp);
-  // 4 y 5. Procesar, codificar y rellenar
-  return { ...prepararYRellenar(alineada, modo, valorRelleno, preparacion), tipos };
+  return { tabla: alinear(tablas, columnaTimestamp), tipos };
 }
 
 /**
- * Para un CSV que ya viene pivotado: no hay que dividir ni alinear,
- * solo procesar, codificar y rellenar sus huecos. Se devuelve como TablaFusionada (sin tipos)
- * para que el resto de la página (vista previa, descarga, CIF) lo trate igual.
+ * Para un CSV que ya viene pivotado: no hay que dividir ni alinear, solo
+ * procesar y codificar. Al leerlo ya se ha comprobado que no le faltan datos,
+ * pero se vuelve a mirar por si la tabla llega de otro sitio. Se devuelve como
+ * TablaFusionada (sin tipos) para que el resto de la página (vista previa,
+ * descarga, CIF) lo trate igual.
  */
 export function prepararTablaPivotada(
   tablaCargada: TablaPivotada,
-  modo: ModoRelleno,
-  valorRelleno: number = VALOR_RELLENO_POR_DEFECTO,
   preparacion: Preparacion = SIN_PREPARACION,
 ): TablaFusionada {
-  return { ...prepararYRellenar(tablaCargada, modo, valorRelleno, preparacion), tipos: [] };
+  return { ...comprobarYPreparar(tablaCargada, preparacion), tipos: [] };
 }
 
 /**
  * El dataset en columnas para guardarlo y cargarlo otra vez como "tabla ya hecha":
- * separado por tipo y alineado (columnas tipo_id), pero sin procesado, sin codificar
- * y con los huecos vacíos. Al cargarlo, el paso 2 hace lo mismo que con el CSV largo.
+ * separado por tipo y alineado (columnas tipo_id), pero sin procesado ni
+ * codificación. Al cargarlo, el paso 2 hace lo mismo que con el CSV largo.
+ * Si le faltan datos, se devuelve con los huecos vacíos: quien lo guarda tiene
+ * que comprobarlo, porque una tabla con huecos no se puede volver a cargar.
  *
  * No sirve 2_fusionado.csv, porque ya está preparado (se añadiría DD otra vez), ni
  * 1_pivotado.csv, porque no lleva el tipo en el nombre de las columnas.
  */
 export function datasetEnColumnas(lecturas: Lectura[], columnaTimestamp: string): TablaPivotada {
-  const { ids, filas } = fusionar(
-    lecturas,
-    columnaTimestamp,
-    'vacio',
-    VALOR_RELLENO_POR_DEFECTO,
-    SIN_PREPARACION,
-  );
+  const { ids, filas } = alinearPorTipo(lecturas, columnaTimestamp).tabla;
   return { columnaTimestamp, ids, filas };
 }
 

@@ -312,52 +312,10 @@
                 <dd class="dato-valor">{{ f.tipos.length }}</dd>
               </div>
             }
-            <div class="dato">
-              <dt class="dato-nombre">Huecos rellenados</dt>
-              <dd class="dato-valor">
-                {{ numero(f.huecosRellenados) }}
-                <span class="text-sm font-normal text-slate-600">de {{ numero(f.huecos) }}</span>
-              </dd>
-            </div>
           </dl>
-
-          <!-- Huecos: momentos en los que un sensor no tiene lectura -->
-          <form class="flex flex-wrap items-end gap-4" (ngSubmit)="aplicarRelleno()">
-            <!-- Desplegable con las opciones de OPCIONES_RELLENO (fusionar.ts) -->
-            <label class="etiqueta">
-              Rellenar los huecos con
-              <select class="campo" name="relleno" [(ngModel)]="relleno">
-                @for (opcion of opcionesRelleno; track opcion.valor) {
-                  <option [value]="opcion.valor">{{ opcion.texto }}</option>
-                }
-              </select>
-            </label>
-            <!-- El valor solo se usa con "Valor fijo". Los min/max son ayuda visual;
-                 la comprobación de verdad la hace validarRelleno -->
-            @if (relleno === 'fijo') {
-              <label class="etiqueta">
-                Valor (entre 0 y 1)
-                <input
-                  class="campo !w-32"
-                  name="valorRelleno"
-                  type="number"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  [(ngModel)]="valorRelleno"
-                />
-              </label>
-            }
-            <button type="submit" class="btn-secundario" [disabled]="!rellenoPendiente()">
-              Aplicar relleno
-            </button>
-            @if (rellenoPendiente()) {
-              <p class="pb-2 text-sm text-amber-900">⚠ Hay un cambio sin aplicar.</p>
-            }
-          </form>
           <p class="text-sm text-slate-600">
-            Un hueco es un momento en el que un sensor no tiene lectura. Ojo: un 0 inventado en un
-            contador puede parecer una anomalía.
+            No falta ningún dato. Si faltara alguno, la tabla no se haría: Isolation Forest no puede
+            ejecutarse con datos incompletos y los nulos se tratan antes de cargar el CSV.
           </p>
 
           <!-- Para no tener que pivotar el CSV largo cada vez. Solo tiene sentido con CSV largo -->
@@ -370,8 +328,7 @@
               </div>
               <p class="text-sm text-slate-600">
                 La próxima vez cárgalo como «Una tabla ya hecha» y no hará falta volver a pivotar.
-                Va sin preparar, así que podrás elegir otra vez cómo prepararlo. Solo se guarda si
-                no le faltan datos.
+                Va sin preparar, así que podrás elegir otra vez cómo prepararlo.
               </p>
               @if (avisoDataset(); as aviso) {
                 <p class="aviso-error whitespace-pre-line" role="alert"><strong>No se ha guardado:</strong> {{ aviso }}</p>

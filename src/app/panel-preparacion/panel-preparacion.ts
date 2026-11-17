@@ -34,7 +34,7 @@ const NOMBRE_OPERACION: Record<Operacion['tipo'], string> = {
  *     (aplicar)="..." (restablecer)="..." (cargarDiccionario)="..." (descargarDiccionario)="..." />
  *
  * Las operaciones se editan en un borrador y solo se aplican (y se rehace la
- * tabla) al pulsar el botón, igual que el filtro y el relleno.
+ * tabla) al pulsar el botón, igual que el filtro.
  */
 @Component({
   selector: 'app-panel-preparacion',
