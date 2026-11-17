@@ -34,6 +34,7 @@ import {
   TablaPivotada,
 } from './pivotar';
 import { Diccionario, Preparacion, prepararCaracteristicas, SIN_PREPARACION } from './preparar';
+import { aplicarRango, RangoRegistros, SIN_RANGO } from './rango';
 
 /** Nombre que se usa cuando una fila no tiene tipo. */
 export const TIPO_DESCONOCIDO = 'sin_tipo';
@@ -72,6 +73,7 @@ function incompletosDe(tabla: TablaPivotada) {
     tabla.ids,
     // Sin fecha, el momento es el propio número de registro: no aporta nada.
     tabla.sinFecha ? undefined : tabla.filas.map((f) => f.timestamp),
+    tabla.primerRegistro ?? 1,
   );
 }
 
@@ -86,7 +88,8 @@ export function comprobarSinHuecos(alineada: TablaPivotada): void {
     throw new Error(
       [
         `Faltan datos en ${resumenHuecos(incompletos)}: hay momentos en los que algún sensor ` +
-          `no tiene lectura. ${CONSEJO_NULOS}`,
+          `no tiene lectura. ${CONSEJO_NULOS} También puedes quedarte con una época sin ` +
+          'huecos con el rango de registros.',
         ...lineasDeHuecos(incompletos),
       ].join('\n'),
     );
@@ -211,18 +214,20 @@ export function alinear(tablas: TablaPivotada[], columnaTimestamp: string): Tabl
 }
 
 /**
- * Proceso completo: divide por tipo, pivota cada tipo, alinea, comprueba que no
- * falta ningún dato y procesa y codifica las características.
- * Lanza un error si faltan datos (ver comprobarSinHuecos).
+ * Proceso completo: divide por tipo, pivota cada tipo, alinea, se queda con el
+ * rango de registros, comprueba que no falta ningún dato y procesa y codifica
+ * las características. Lanza un error si faltan datos dentro del rango (ver
+ * comprobarSinHuecos) o si el rango no cabe en la tabla.
  */
 export function fusionar(
   lecturas: Lectura[],
   columnaTimestamp: string,
   preparacion: Preparacion = SIN_PREPARACION,
+  rango: RangoRegistros = SIN_RANGO,
 ): TablaFusionada {
   const { tabla, tipos } = alinearPorTipo(lecturas, columnaTimestamp);
-  // 4 y 5. Comprobar, procesar y codificar
-  return { ...comprobarYPreparar(tabla, preparacion), tipos };
+  // 4 y 5. Rango, comprobar, procesar y codificar
+  return { ...comprobarYPreparar(aplicarRango(tabla, rango), preparacion), tipos };
 }
 
 /** Pasos 1 a 3: divide por tipo, pivota cada uno y los alinea. Puede dejar huecos. */
@@ -248,16 +253,17 @@ function alinearPorTipo(
 
 /**
  * Para un CSV que ya viene pivotado: no hay que dividir ni alinear, solo
- * procesar y codificar. Al leerlo ya se ha comprobado que no le faltan datos,
- * pero se vuelve a mirar por si la tabla llega de otro sitio. Se devuelve como
- * TablaFusionada (sin tipos) para que el resto de la página (vista previa,
- * descarga, CIF) lo trate igual.
+ * quedarse con el rango de registros, procesar y codificar. Al leerlo ya se ha
+ * comprobado que no le faltan datos, pero se vuelve a mirar por si la tabla
+ * llega de otro sitio. Se devuelve como TablaFusionada (sin tipos) para que el
+ * resto de la página (vista previa, descarga, CIF) lo trate igual.
  */
 export function prepararTablaPivotada(
   tablaCargada: TablaPivotada,
   preparacion: Preparacion = SIN_PREPARACION,
+  rango: RangoRegistros = SIN_RANGO,
 ): TablaFusionada {
-  return { ...comprobarYPreparar(tablaCargada, preparacion), tipos: [] };
+  return { ...comprobarYPreparar(aplicarRango(tablaCargada, rango), preparacion), tipos: [] };
 }
 
 /**
@@ -266,13 +272,31 @@ export function prepararTablaPivotada(
  * codificación. Al cargarlo, el paso 2 hace lo mismo que con el CSV largo.
  * Si le faltan datos, se devuelve con los huecos vacíos: quien lo guarda tiene
  * que comprobarlo, porque una tabla con huecos no se puede volver a cargar.
+ * Con un rango de registros, solo esas filas (en el fichero guardado, la
+ * primera vuelve a ser el registro 1).
  *
  * No sirve 2_fusionado.csv, porque ya está preparado (se añadiría DD otra vez), ni
  * 1_pivotado.csv, porque no lleva el tipo en el nombre de las columnas.
  */
-export function datasetEnColumnas(lecturas: Lectura[], columnaTimestamp: string): TablaPivotada {
-  const { ids, filas } = alinearPorTipo(lecturas, columnaTimestamp).tabla;
-  return { columnaTimestamp, ids, filas };
+export function datasetEnColumnas(
+  lecturas: Lectura[],
+  columnaTimestamp: string,
+  rango: RangoRegistros = SIN_RANGO,
+): TablaPivotada {
+  const { ids, filas, primerRegistro } = aplicarRango(
+    alinearPorTipo(lecturas, columnaTimestamp).tabla,
+    rango,
+  );
+  return { columnaTimestamp, ids, filas, primerRegistro };
+}
+
+/**
+ * Cuántos registros tiene la tabla alineada del CSV largo antes del rango: uno
+ * por cada momento distinto (alinear junta los de todos los tipos). Sirve para
+ * decir hasta dónde llega el rango aunque la tabla haya dado error.
+ */
+export function registrosAlineados(lecturas: Lectura[]): number {
+  return new Set(lecturas.map((l) => l.timestamp)).size;
 }
 
 /**

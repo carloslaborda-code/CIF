@@ -266,6 +266,34 @@
         <p class="aviso-error whitespace-pre-line" role="alert"><strong>Error:</strong> {{ mensaje }}</p>
       }
 
+      <!-- Rango de registros: lo pidió el tutor para quedarse con una época sin huecos.
+           Va fuera del @if de la tabla: si faltan datos, aquí se elige un trozo completo -->
+      @if (numRegistros() !== null) {
+        <section class="tarjeta space-y-4" aria-labelledby="titulo-rango">
+          <div>
+            <h2 id="titulo-rango" class="text-lg font-semibold text-slate-900">
+              Rango de registros
+              <span
+                class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold"
+                [class]="esSinRango(rango()) ? 'bg-slate-200 text-slate-700' : 'bg-blue-100 text-blue-900'"
+              >
+                {{ esSinRango(rango()) ? 'Toda la tabla' : 'Rango activo' }}
+              </span>
+            </h2>
+            <p class="ayuda">
+              Opcional. Analiza solo los registros de un trozo seguido de la tabla (incluidos los
+              dos extremos), por ejemplo una época en la que no faltan datos. Cada registro es una
+              fila de datos y se numera desde 1; la numeración no cambia al elegir el rango.
+            </p>
+          </div>
+          <app-panel-rango
+            [rango]="rango()"
+            [numRegistros]="numRegistros()"
+            (aplicar)="aplicarRango($event)"
+          />
+        </section>
+      }
+
       <!-- Procesado de características y codificación (3.1.1 y 3.1.2 del artículo).
            Va fuera del @if de la tabla para poder corregir una operación que dé error -->
       @if (columnasBase().length > 0) {

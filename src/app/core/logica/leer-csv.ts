@@ -130,18 +130,22 @@ const COLUMNAS_EN_AVISO = 3;
  * cabecera), ya recortadas y completadas hasta el número de columnas; `nombres`,
  * el nombre de cada columna. El registro 1 es la primera fila de datos.
  * Con `momentos` (el timestamp de cada fila), cada registro lleva el suyo.
+ * `primero` es el número de registro de la primera fila (más de 1 si la tabla
+ * es un rango de registros).
  */
 export function registrosIncompletos(
   filas: string[][],
   nombres: string[],
   momentos?: string[],
+  primero = 1,
 ): RegistroIncompleto[] {
   const incompletos: RegistroIncompleto[] = [];
   filas.forEach((fila, i) => {
     const columnas = nombres.filter((_, c) => fila[c] === '');
     if (columnas.length > 0) {
+      const registro = primero + i;
       incompletos.push(
-        momentos ? { registro: i + 1, momento: momentos[i], columnas } : { registro: i + 1, columnas },
+        momentos ? { registro, momento: momentos[i], columnas } : { registro, columnas },
       );
     }
   });

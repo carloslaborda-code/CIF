@@ -1,0 +1,52 @@
+<form class="flex flex-wrap items-end gap-4" (ngSubmit)="alAplicar()">
+  <label class="etiqueta">
+    Desde el registro
+    <input
+      class="campo !w-36"
+      name="desde"
+      type="number"
+      min="1"
+      step="1"
+      placeholder="1"
+      [(ngModel)]="borrador().desde"
+      (ngModelChange)="refrescar()"
+    />
+  </label>
+  <label class="etiqueta">
+    Hasta el registro
+    <input
+      class="campo !w-36"
+      name="hasta"
+      type="number"
+      min="1"
+      step="1"
+      [placeholder]="numRegistros() ?? 'el último'"
+      [(ngModel)]="borrador().hasta"
+      (ngModelChange)="refrescar()"
+    />
+  </label>
+  <button type="submit" class="btn-primario" [disabled]="!pendiente() || error() !== null">
+    Aplicar rango
+  </button>
+  @if (!esSinRango(rango())) {
+    <button type="button" class="btn-secundario" (click)="todaLaTabla()">Toda la tabla</button>
+  }
+</form>
+
+<div aria-live="polite">
+  @if (error(); as mensaje) {
+    <p class="text-sm text-red-800">{{ mensaje }}</p>
+  } @else {
+    <p class="text-sm text-slate-700">
+      @if (numRegistros() !== null) {
+        La tabla tiene {{ numRegistros() }} registros.
+        @if (registrosQueEntran() !== null && registrosQueEntran() !== numRegistros()) {
+          Con este rango entran {{ registrosQueEntran() }}.
+        }
+      }
+      @if (pendiente()) {
+        <span class="font-medium text-amber-900">⚠ Hay cambios sin aplicar.</span>
+      }
+    </p>
+  }
+</div>

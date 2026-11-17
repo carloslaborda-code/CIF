@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import {
   columnasFusionadas,
   datasetEnColumnas,
+  registrosAlineados,
   fusionar,
   prepararTablaPivotada,
   TablaFusionada,
@@ -62,6 +63,8 @@ import { numero } from '../graficos/escala';
 import { PanelEstimacion, ValoresPropuestos } from '../panel-estimacion/panel-estimacion';
 import { PanelPreparacion } from '../panel-preparacion/panel-preparacion';
 import { PanelFiltros } from '../panel-filtros/panel-filtros';
+import { PanelRango } from '../panel-rango/panel-rango';
+import { esSinRango, RangoRegistros, SIN_RANGO } from '../core/logica/rango';
 import { Descarga, Resultados } from '../resultados/resultados';
 import { BarraPasos, Paso } from '../ui/barra-pasos';
 import { VistaPrevia } from '../vista-previa/vista-previa';
@@ -95,6 +98,7 @@ const TITULOS = ['Datos', 'Preparar', 'Contextos', 'Ajustes', 'Resultados'];
     BarraPasos,
     VistaPrevia,
     PanelFiltros,
+    PanelRango,
     PanelPreparacion,
     EditorContextos,
     PanelEstimacion,
@@ -139,6 +143,9 @@ export class PaginaPrincipal {
   protected readonly parametrosLeidos = signal<ParametrosColumnas | null>(null);
   /** Filtro aplicado a las lecturas antes de pivotar. */
   protected readonly filtro = signal<FiltroLecturas>(SIN_FILTRO);
+  /** Rango de registros que se analiza (rango.ts). Con los dos formatos. */
+  protected readonly rango = signal<RangoRegistros>(SIN_RANGO);
+  protected readonly esSinRango = esSinRango;
   /** Alias (aulario) de cada columna de la tabla fusionada, para el editor de contextos. */
   protected readonly etiquetas = signal<Record<string, string>>({});
   /** Todas las lecturas pivotadas por id (paso intermedio, solo con CSV largo). */
@@ -474,7 +481,7 @@ export class PaginaPrincipal {
     this.columnasBase.set(columnasFusionadas(filtradas));
     const preparacion = this.preparacionPara(p.timestamp);
     try {
-      this.fusion.set(fusionar(filtradas, p.timestamp, preparacion));
+      this.fusion.set(fusionar(filtradas, p.timestamp, preparacion, this.rango()));
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : String(e));
       return;
@@ -492,7 +499,7 @@ export class PaginaPrincipal {
     this.columnasBase.set(cargada.ids);
     const preparacion = this.preparacionPara(cargada.columnaTimestamp, cargada.sinFecha);
     try {
-      this.fusion.set(prepararTablaPivotada(cargada, preparacion));
+      this.fusion.set(prepararTablaPivotada(cargada, preparacion, this.rango()));
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : String(e));
       return;
@@ -522,6 +529,29 @@ export class PaginaPrincipal {
         `Filtro aplicado: quedan ${tabla.filas.length} filas y ${tabla.ids.length} columnas.`,
       );
     }
+  }
+
+  /**
+   * Registros de la tabla entera, antes del rango, para el panel del rango. Con
+   * el CSV largo, uno por cada momento de las lecturas que pasan el filtro.
+   */
+  protected readonly numRegistros = computed(() => {
+    const cargada = this.tablaCargada();
+    if (this.origenProcesado() === 'pivotado') {
+      return cargada ? cargada.filas.length : null;
+    }
+    const lecturas = this.lecturas();
+    return lecturas ? registrosAlineados(aplicarFiltro(lecturas, this.filtro())) : null;
+  });
+
+  /** Se llama desde el panel del rango al pulsar "Aplicar rango" o "Toda la tabla". */
+  protected aplicarRango(rango: RangoRegistros): void {
+    this.rango.set(rango);
+    this.rehacerTabla(
+      esSinRango(rango)
+        ? 'Rango quitado: se analiza toda la tabla.'
+        : `Rango aplicado: del registro ${rango.desde ?? 1} al ${rango.hasta ?? 'último'}.`,
+    );
   }
 
   /** Aplica las operaciones del procesado de características (3.1.1). */
@@ -566,7 +596,7 @@ export class PaginaPrincipal {
   }
 
   /**
-   * Descarga el dataset en columnas (con el filtro aplicado) para cargarlo la próxima
+   * Descarga el dataset en columnas (con el filtro y el rango aplicados) para cargarlo la próxima
    * vez como "Una tabla ya hecha" sin tener que pivotar otra vez el CSV largo.
    * Si le faltan datos no se guarda, porque no se podría volver a cargar: se avisa
    * de en qué registros, con el mismo mensaje que al cargarlo. (Con datos que
@@ -579,10 +609,19 @@ export class PaginaPrincipal {
       return;
     }
     const lecturas = aplicarFiltro(this.lecturas() ?? [], this.filtro());
-    const dataset = datasetEnColumnas(lecturas, p.timestamp);
+    let dataset: TablaPivotada;
+    try {
+      dataset = datasetEnColumnas(lecturas, p.timestamp, this.rango());
+    } catch (e) {
+      // Un rango que no cabe en la tabla.
+      this.avisoDataset.set(e instanceof Error ? e.message : String(e));
+      return;
+    }
     const incompletos = registrosIncompletos(
       dataset.filas.map((f) => f.valores),
       dataset.ids,
+      undefined,
+      dataset.primerRegistro ?? 1,
     );
     if (incompletos.length > 0) {
       const aviso = avisoDeHuecos('dataset.csv', incompletos);
@@ -690,6 +729,7 @@ export class PaginaPrincipal {
       sinFecha: !this.tieneFecha(),
       columnas: this.parametrosLeidos() ?? { ...this.parametros },
       filtro: this.filtro(),
+      rango: this.rango(),
       // Las operaciones que se usaron y el diccionario que salió de la tabla, para que
       // otros datos se codifiquen con los mismos números.
       preparacion: {
@@ -763,6 +803,7 @@ export class PaginaPrincipal {
         this.parametros = { ...c.columnas };
       }
       this.filtro.set(c.filtro);
+      this.rango.set(c.rango);
       this.operaciones.set(c.preparacion.operaciones);
       this.diccionarioEntrada.set(c.preparacion.diccionario);
       this.parametrosIF = {

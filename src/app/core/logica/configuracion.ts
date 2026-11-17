@@ -17,6 +17,7 @@ import {
   SIN_PREPARACION,
   validarDiccionario,
 } from './preparar';
+import { RangoRegistros, SIN_RANGO, validarRango } from './rango';
 import { validarSemilla } from './semilla';
 
 /** Sube este número si cambia el formato, para poder reconocer ficheros antiguos. */
@@ -39,6 +40,8 @@ export interface ConfiguracionCif {
   columnas: ParametrosColumnas | null;
   /** Filtro de lecturas por tipo, sensor y aulario (solo formato largo). */
   filtro: FiltroLecturas;
+  /** Rango de registros (rango.ts). SIN_RANGO en ficheros antiguos. */
+  rango: RangoRegistros;
   /**
    * Procesado de características (3.1.1) y diccionario de la codificación (3.1.2).
    * Al guardar, el diccionario es el que salió de la tabla (el de entrada más los
@@ -152,6 +155,17 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     }
   }
 
+  // El rango se añadió después: si falta, toda la tabla.
+  const rango: RangoRegistros = { ...SIN_RANGO };
+  if (typeof d.rango === 'object' && d.rango !== null) {
+    rango.desde = d.rango.desde ?? null;
+    rango.hasta = d.rango.hasta ?? null;
+    const errorRango = validarRango(rango);
+    if (errorRango) {
+      throw new Error(errorRango);
+    }
+  }
+
   // La preparación se añadió después. Si falta, no se procesa nada (así se
   // repiten igual los resultados de antes), aunque lo que es texto se codifica.
   const preparacion: Preparacion = {
@@ -203,6 +217,7 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     sinFecha: d.origen === 'pivotado' && d.sinFecha === true,
     columnas,
     filtro,
+    rango,
     preparacion,
     parametros: {
       numArboles: p.numArboles,

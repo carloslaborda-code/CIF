@@ -77,6 +77,11 @@ export interface TablaPivotada {
    * es su número de registro (1, 2, 3…) y columnaTimestamp es COLUMNA_REGISTRO.
    */
   sinFecha?: boolean;
+  /**
+   * Número de registro de la primera fila. Si no está, 1. Es mayor que 1 cuando
+   * se ha elegido un rango de registros (rango.ts): se conserva la numeración.
+   */
+  primerRegistro?: number;
 }
 
 /** Nombre de la columna que identifica cada fila cuando el CSV no tiene fecha. */
