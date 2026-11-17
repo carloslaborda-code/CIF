@@ -460,22 +460,94 @@
                 Aplicar z-score a todas las columnas
               </span>
               <span class="block text-sm text-slate-600">
-                Con la media y la desviación de estos datos. Se aplica después del procesado y la
-                codificación, a la tabla que recibe el Isolation Forest.
+                Se aplica después del procesado y la codificación, a la tabla que recibe el
+                Isolation Forest.
               </span>
             </span>
           </label>
+
+          @if (zscore()) {
+            <!-- De dónde salen la media y la desviación. Con unos parámetros guardados, otros
+                 datos (febrero) se normalizan igual que los primeros (enero) -->
+            <fieldset class="space-y-2 rounded-lg border border-slate-300 p-4">
+              <legend class="px-1 text-sm font-semibold text-slate-900">
+                Media y desviación de cada columna
+              </legend>
+              <label class="flex items-start gap-3 text-sm text-slate-800">
+                <input
+                  type="radio"
+                  name="modoZscore"
+                  class="casilla mt-0.5"
+                  [checked]="modoZscore() === 'propios'"
+                  (change)="cambiarModoZscore('propios')"
+                />
+                <span>Calcularlas con estos datos</span>
+              </label>
+              <label class="flex items-start gap-3 text-sm text-slate-800">
+                <input
+                  type="radio"
+                  name="modoZscore"
+                  class="casilla mt-0.5"
+                  [checked]="modoZscore() === 'cargados'"
+                  [disabled]="!parametrosCargados()"
+                  (change)="cambiarModoZscore('cargados')"
+                />
+                <span>
+                  Usar unos parámetros guardados
+                  @if (parametrosCargados(); as c) {
+                    <span class="font-mono text-slate-600">({{ c.fichero }}, {{ c.parametros.length }} columnas)</span>
+                  }
+                  <span class="block text-slate-600">
+                    Por ejemplo, los de enero para normalizar febrero: así todo tiene la misma forma
+                    estadística. Tienen que traer todas las columnas de la tabla.
+                  </span>
+                </span>
+              </label>
+              <div class="flex flex-wrap items-center gap-2 pt-1">
+                <!-- El input real está escondido; el label hace de botón -->
+                <label
+                  class="btn-secundario btn-pequeno focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
+                >
+                  Cargar parámetros…
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    class="sr-only"
+                    (change)="alElegirParametros($event)"
+                  />
+                </label>
+              </div>
+              @if (errorParametros(); as mensaje) {
+                <p class="text-sm text-red-800" role="alert">{{ mensaje }}</p>
+              }
+            </fieldset>
+          }
 
           @if (normalizada(); as n) {
             @if (n.error) {
               <p class="aviso-error whitespace-pre-line" role="alert"><strong>Error:</strong> {{ n.error }}</p>
             } @else {
               <p class="text-sm text-slate-700" aria-live="polite">
-                {{ n.parametros.length }} columnas normalizadas.
+                {{ n.parametros.length - n.columnasSinUsar.length }} columnas normalizadas con
+                {{
+                  modoZscore() === 'cargados'
+                    ? 'los parámetros de ' + parametrosCargados()?.fichero
+                    : 'la media y la desviación de estos datos'
+                }}.
                 @if (columnasConstantes(n.parametros) > 0) {
                   {{ columnasConstantes(n.parametros) }} son constantes (desviación 0) y quedan a 0.
                 }
               </p>
+              @if (n.columnasSinUsar.length > 0) {
+                <p class="aviso-info">
+                  <span>
+                    Los parámetros traen {{ n.columnasSinUsar.length }}
+                    {{ n.columnasSinUsar.length === 1 ? 'columna que no está' : 'columnas que no están' }}
+                    en la tabla y no se usan:
+                    <span class="font-mono">{{ n.columnasSinUsar.join(', ') }}</span>.
+                  </span>
+                </p>
+              }
               <details class="plegable">
                 <summary>Ver la media y la desviación de cada columna</summary>
                 <div class="plegable-contenido overflow-auto">
@@ -500,18 +572,20 @@
                   </table>
                 </div>
               </details>
-              <div class="flex flex-col gap-1">
-                <div>
-                  <button type="button" class="btn-secundario" (click)="descargarNormalizado()">
-                    Guardar el dataset normalizado (dataset_normalizado.csv)
-                  </button>
-                </div>
-                <p class="text-sm text-slate-600">
-                  Es la tabla que recibe el Isolation Forest, con todas las cifras y punto decimal.
-                  Sirve para otros algoritmos o para cargarla otra vez como «Una tabla ya hecha» sin
-                  volver a normalizar (entonces no marques esta casilla: ya está normalizada).
-                </p>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" class="btn-secundario" (click)="descargarParametros()">
+                  Guardar parámetros (parametros_zscore.csv)
+                </button>
+                <button type="button" class="btn-secundario" (click)="descargarNormalizado()">
+                  Guardar el dataset normalizado (dataset_normalizado.csv)
+                </button>
               </div>
+              <p class="text-sm text-slate-600">
+                Los parámetros (columna;media;desviacion) sirven para normalizar otros datos igual que
+                estos: cárgalos con «Cargar parámetros…». El dataset normalizado es la tabla que
+                recibe el Isolation Forest, con todas las cifras y punto decimal; si lo cargas otra
+                vez como «Una tabla ya hecha», no marques el z-score: ya está normalizado.
+              </p>
             }
           }
         </section>

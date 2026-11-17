@@ -18,6 +18,7 @@ import { cifACsv, ejecutarCif, ResultadoCif, resumenParticionesACsv } from '../c
 import { CORTES_POR_DEFECTO, CortesClasificacion } from '../core/logica/clasificar';
 import {
   ConfiguracionCif,
+  ConfiguracionZscore,
   configuracionAJson,
   leerConfiguracion,
   VERSION_CONFIGURACION,
@@ -67,8 +68,10 @@ import { PanelRango } from '../panel-rango/panel-rango';
 import { esSinRango, RangoRegistros, SIN_RANGO } from '../core/logica/rango';
 import {
   calcularParametros,
+  leerParametrosCsv,
   normalizar,
   ParametrosNormalizacion,
+  parametrosACsv,
 } from '../core/logica/normalizar';
 import { Descarga, Resultados } from '../resultados/resultados';
 import { BarraPasos, Paso } from '../ui/barra-pasos';
@@ -153,6 +156,21 @@ export class PaginaPrincipal {
    * lo pidió el tutor para usar el mismo dataset con otros algoritmos.
    */
   protected readonly zscore = signal(false);
+  /**
+   * De dónde salen la media y la desviación: de estos datos ('propios') o de un
+   * fichero cargado ('cargados'), por ejemplo los de enero para normalizar febrero.
+   */
+  protected readonly modoZscore = signal<'propios' | 'cargados'>('propios');
+  /**
+   * Parámetros cargados de un fichero, con su nombre. Se mantienen aunque se
+   * cargue otro CSV: es justo para aplicarlos a otros datos.
+   */
+  protected readonly parametrosCargados = signal<{
+    fichero: string;
+    parametros: ParametrosNormalizacion;
+  } | null>(null);
+  /** Error al leer un fichero de parámetros. */
+  protected readonly errorParametros = signal<string | null>(null);
   /** Rango de registros que se analiza (rango.ts). Con los dos formatos. */
   protected readonly rango = signal<RangoRegistros>(SIN_RANGO);
   protected readonly esSinRango = esSinRango;
@@ -555,24 +573,38 @@ export class PaginaPrincipal {
   });
 
   /**
-   * La tabla preparada normalizada con z-score, con sus parámetros (media y
-   * desviación de cada columna, de estos mismos datos). null sin z-score o sin
-   * tabla. Si no se puede normalizar, error y tabla null.
+   * La tabla preparada normalizada con z-score y los parámetros usados: los de
+   * estos datos o los cargados, según modoZscore. null sin z-score o sin tabla.
+   * Si no se puede normalizar (por ejemplo, a los parámetros cargados les falta
+   * una columna), error y tabla null.
    */
   protected readonly normalizada = computed<{
     tabla: TablaPivotada | null;
     parametros: ParametrosNormalizacion;
+    /** Columnas de los parámetros cargados que no están en la tabla. */
+    columnasSinUsar: string[];
     error: string | null;
   } | null>(() => {
     const f = this.fusion();
     if (!f || !this.zscore()) {
       return null;
     }
+    const cargados = this.parametrosCargados();
     try {
-      const parametros = calcularParametros(f);
-      return { tabla: normalizar(f, parametros).tabla, parametros, error: null };
+      if (this.modoZscore() === 'cargados' && !cargados) {
+        throw new Error('Carga antes un fichero de parámetros, o calcula los de estos datos.');
+      }
+      const parametros =
+        this.modoZscore() === 'cargados' ? cargados!.parametros : calcularParametros(f);
+      const r = normalizar(f, parametros);
+      return { tabla: r.tabla, parametros, columnasSinUsar: r.columnasSinUsar, error: null };
     } catch (e) {
-      return { tabla: null, parametros: [], error: e instanceof Error ? e.message : String(e) };
+      return {
+        tabla: null,
+        parametros: [],
+        columnasSinUsar: [],
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   });
 
@@ -598,6 +630,64 @@ export class PaginaPrincipal {
       this.normalizada()?.error ??
         (activo ? 'Z-score aplicado a todas las columnas.' : 'Z-score quitado.'),
     );
+  }
+
+  /** Cambia de dónde salen la media y la desviación. Lo calculado antes ya no vale. */
+  protected cambiarModoZscore(modo: 'propios' | 'cargados'): void {
+    this.modoZscore.set(modo);
+    this.quitarCalculos();
+    this.anuncio.set(
+      this.normalizada()?.error ??
+        (modo === 'propios'
+          ? 'Z-score con la media y la desviación de estos datos.'
+          : 'Z-score con los parámetros cargados.'),
+    );
+  }
+
+  /** Lee un fichero de parámetros (columna;media;desviacion) y pasa a usarlo. */
+  protected async alElegirParametros(evento: Event): Promise<void> {
+    const input = evento.target as HTMLInputElement;
+    const fichero = input.files?.[0];
+    // Vaciamos el input para que se pueda volver a elegir el mismo fichero.
+    input.value = '';
+    if (!fichero) {
+      return;
+    }
+    try {
+      const parametros = leerParametrosCsv(await fichero.text());
+      this.errorParametros.set(null);
+      this.parametrosCargados.set({ fichero: fichero.name, parametros });
+      this.cambiarModoZscore('cargados');
+    } catch (e) {
+      this.errorParametros.set(`${fichero.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** Descarga la media y la desviación que se están usando, para aplicarlas a otros datos. */
+  protected descargarParametros(): void {
+    const n = this.normalizada();
+    if (n && !n.error) {
+      this.guardarFichero(parametrosACsv(n.parametros), 'parametros_zscore.csv');
+    }
+  }
+
+  /** El z-score tal como está, para el JSON de configuración (con los parámetros usados). */
+  private configuracionZscore(): ConfiguracionZscore {
+    const n = this.normalizada();
+    const cargados = this.parametrosCargados();
+    const modo = this.modoZscore();
+    let parametros: ParametrosNormalizacion | null = null;
+    if (n && !n.error) {
+      parametros = n.parametros;
+    } else if (this.zscore() && modo === 'cargados' && cargados) {
+      parametros = cargados.parametros;
+    }
+    return {
+      activo: this.zscore(),
+      modo,
+      fichero: modo === 'cargados' ? (cargados?.fichero ?? null) : null,
+      parametros,
+    };
   }
 
   /** Descarga la tabla normalizada, la que recibe el CIF, para usarla con otros algoritmos. */
@@ -799,6 +889,7 @@ export class PaginaPrincipal {
       columnas: this.parametrosLeidos() ?? { ...this.parametros },
       filtro: this.filtro(),
       rango: this.rango(),
+      zscore: this.configuracionZscore(),
       // Las operaciones que se usaron y el diccionario que salió de la tabla, para que
       // otros datos se codifiquen con los mismos números.
       preparacion: {
@@ -873,6 +964,16 @@ export class PaginaPrincipal {
       }
       this.filtro.set(c.filtro);
       this.rango.set(c.rango);
+      this.zscore.set(c.zscore.activo);
+      this.modoZscore.set(c.zscore.modo);
+      if (c.zscore.modo === 'cargados' && c.zscore.parametros) {
+        // Como si se hubiera cargado el fichero de parámetros.
+        this.parametrosCargados.set({
+          fichero: c.zscore.fichero ?? 'la configuración',
+          parametros: c.zscore.parametros,
+        });
+      }
+      this.errorParametros.set(null);
       this.operaciones.set(c.preparacion.operaciones);
       this.diccionarioEntrada.set(c.preparacion.diccionario);
       this.parametrosIF = {
@@ -893,11 +994,16 @@ export class PaginaPrincipal {
         this.paso.set(1);
       }
       const ficheros = c.ficheros.length > 0 ? ` Se hizo con: ${c.ficheros.join(', ')}.` : '';
+      const zscore = !c.zscore.activo
+        ? ''
+        : c.zscore.modo === 'cargados'
+          ? ` Z-score con los parámetros guardados${c.zscore.fichero ? ` (${c.zscore.fichero})` : ''}.`
+          : ' Z-score con la media y la desviación de los datos.';
       const siguiente = this.fusion()
         ? 'Ya puedes ejecutar el CIF en el paso 4.'
         : 'Ahora elige el CSV y pulsa «Leer los datos».';
       this.mensajeConfiguracion.set({
-        texto: `Configuración cargada (semilla ${c.semilla ?? 'al azar'}, ${c.contextos.length} contexto(s)).${ficheros} ${siguiente}`,
+        texto: `Configuración cargada (semilla ${c.semilla ?? 'al azar'}, ${c.contextos.length} contexto(s)).${ficheros}${zscore} ${siguiente}`,
         error: false,
       });
     } catch (e) {

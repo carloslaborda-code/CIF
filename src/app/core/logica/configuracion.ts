@@ -17,8 +17,31 @@ import {
   SIN_PREPARACION,
   validarDiccionario,
 } from './preparar';
+import { ParametrosNormalizacion, validarParametros as validarParametrosZscore } from './normalizar';
 import { RangoRegistros, SIN_RANGO, validarRango } from './rango';
 import { validarSemilla } from './semilla';
+
+/**
+ * Normalización z-score (normalizar.ts). Con 'cargados', los parámetros se
+ * vuelven a usar tal cual al cargar la configuración (como si se cargara el
+ * fichero). Con 'propios', se calculan otra vez con los datos que haya: los
+ * guardados son solo para saber qué salió.
+ */
+export interface ConfiguracionZscore {
+  activo: boolean;
+  modo: 'propios' | 'cargados';
+  /** Nombre del fichero de parámetros, con 'cargados'. Solo informativo. */
+  fichero: string | null;
+  /** Media y desviación usadas. null si el z-score no estaba activado. */
+  parametros: ParametrosNormalizacion | null;
+}
+
+export const SIN_ZSCORE: ConfiguracionZscore = {
+  activo: false,
+  modo: 'propios',
+  fichero: null,
+  parametros: null,
+};
 
 /** Sube este número si cambia el formato, para poder reconocer ficheros antiguos. */
 export const VERSION_CONFIGURACION = 1;
@@ -48,6 +71,8 @@ export interface ConfiguracionCif {
    * valores nuevos), así otros datos se codifican con los mismos números.
    */
   preparacion: Preparacion;
+  /** Normalización z-score. SIN_ZSCORE en ficheros antiguos. */
+  zscore: ConfiguracionZscore;
   parametros: {
     numArboles: number;
     umbral: number;
@@ -186,6 +211,39 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     preparacion.diccionario = { ...diccionario };
   }
 
+  // El z-score se añadió después: si falta, sin normalizar.
+  const zscore: ConfiguracionZscore = { ...SIN_ZSCORE };
+  if (typeof d.zscore === 'object' && d.zscore !== null) {
+    const z = d.zscore;
+    if (typeof z.activo !== 'boolean') {
+      throw new Error('El z-score debe decir si está activado (activo: true o false).');
+    }
+    if (z.modo !== 'propios' && z.modo !== 'cargados') {
+      throw new Error('El modo del z-score debe ser "propios" o "cargados".');
+    }
+    zscore.activo = z.activo;
+    zscore.modo = z.modo;
+    zscore.fichero = typeof z.fichero === 'string' ? z.fichero : null;
+    if (z.parametros !== null && z.parametros !== undefined) {
+      if (!Array.isArray(z.parametros)) {
+        throw new Error('Los parámetros del z-score deben ser una lista.');
+      }
+      const parametros: ParametrosNormalizacion = z.parametros.map((p: any) => ({
+        columna: String(p?.columna ?? ''),
+        media: Number(p?.media),
+        desviacion: Number(p?.desviacion),
+      }));
+      const errorParametros = validarParametrosZscore(parametros);
+      if (errorParametros) {
+        throw new Error(`Z-score: ${errorParametros}`);
+      }
+      zscore.parametros = parametros;
+    }
+    if (zscore.modo === 'cargados' && zscore.parametros === null) {
+      throw new Error('El z-score usa parámetros cargados, pero la configuración no los trae.');
+    }
+  }
+
   // La estimación y los cortes se añadieron después: si faltan, los del artículo.
   const estimacion: ParametrosEstimacion = { ...ESTIMACION_POR_DEFECTO };
   if (typeof d.estimacion === 'object' && d.estimacion !== null) {
@@ -219,6 +277,7 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     filtro,
     rango,
     preparacion,
+    zscore,
     parametros: {
       numArboles: p.numArboles,
       umbral: p.umbral,
