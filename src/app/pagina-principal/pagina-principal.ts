@@ -65,6 +65,11 @@ import { PanelPreparacion } from '../panel-preparacion/panel-preparacion';
 import { PanelFiltros } from '../panel-filtros/panel-filtros';
 import { PanelRango } from '../panel-rango/panel-rango';
 import { esSinRango, RangoRegistros, SIN_RANGO } from '../core/logica/rango';
+import {
+  calcularParametros,
+  normalizar,
+  ParametrosNormalizacion,
+} from '../core/logica/normalizar';
 import { Descarga, Resultados } from '../resultados/resultados';
 import { BarraPasos, Paso } from '../ui/barra-pasos';
 import { VistaPrevia } from '../vista-previa/vista-previa';
@@ -143,6 +148,11 @@ export class PaginaPrincipal {
   protected readonly parametrosLeidos = signal<ParametrosColumnas | null>(null);
   /** Filtro aplicado a las lecturas antes de pivotar. */
   protected readonly filtro = signal<FiltroLecturas>(SIN_FILTRO);
+  /**
+   * true si se aplica el z-score a la tabla preparada (normalizar.ts). Opcional:
+   * lo pidió el tutor para usar el mismo dataset con otros algoritmos.
+   */
+  protected readonly zscore = signal(false);
   /** Rango de registros que se analiza (rango.ts). Con los dos formatos. */
   protected readonly rango = signal<RangoRegistros>(SIN_RANGO);
   protected readonly esSinRango = esSinRango;
@@ -544,6 +554,60 @@ export class PaginaPrincipal {
     return lecturas ? registrosAlineados(aplicarFiltro(lecturas, this.filtro())) : null;
   });
 
+  /**
+   * La tabla preparada normalizada con z-score, con sus parámetros (media y
+   * desviación de cada columna, de estos mismos datos). null sin z-score o sin
+   * tabla. Si no se puede normalizar, error y tabla null.
+   */
+  protected readonly normalizada = computed<{
+    tabla: TablaPivotada | null;
+    parametros: ParametrosNormalizacion;
+    error: string | null;
+  } | null>(() => {
+    const f = this.fusion();
+    if (!f || !this.zscore()) {
+      return null;
+    }
+    try {
+      const parametros = calcularParametros(f);
+      return { tabla: normalizar(f, parametros).tabla, parametros, error: null };
+    } catch (e) {
+      return { tabla: null, parametros: [], error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  /**
+   * La tabla que reciben la estimación y el CIF: la preparada o, con z-score, la
+   * normalizada. null si no hay tabla o si el z-score ha dado error.
+   */
+  protected readonly tablaAnalizar = computed<TablaPivotada | null>(() => {
+    const n = this.normalizada();
+    return n ? n.tabla : this.fusion();
+  });
+
+  /** Columnas constantes (desviación 0): con z-score quedan a 0. */
+  protected columnasConstantes(p: ParametrosNormalizacion): number {
+    return p.filter((x) => x.desviacion === 0).length;
+  }
+
+  /** Activa o quita el z-score. Lo calculado antes (estimación y CIF) ya no vale. */
+  protected cambiarZscore(activo: boolean): void {
+    this.zscore.set(activo);
+    this.quitarCalculos();
+    this.anuncio.set(
+      this.normalizada()?.error ??
+        (activo ? 'Z-score aplicado a todas las columnas.' : 'Z-score quitado.'),
+    );
+  }
+
+  /** Descarga la tabla normalizada, la que recibe el CIF, para usarla con otros algoritmos. */
+  protected descargarNormalizado(): void {
+    const tabla = this.normalizada()?.tabla;
+    if (tabla) {
+      this.guardarFichero(tablaACsv(tabla), 'dataset_normalizado.csv');
+    }
+  }
+
   /** Se llama desde el panel del rango al pulsar "Aplicar rango" o "Toda la tabla". */
   protected aplicarRango(rango: RangoRegistros): void {
     this.rango.set(rango);
@@ -667,8 +731,13 @@ export class PaginaPrincipal {
    * para que al navegador le dé tiempo a pintar "Calculando…".
    */
   protected async ejecutarCifPaso(): Promise<void> {
-    const tabla = this.fusion();
-    if (!tabla || this.ejecutando()) {
+    if (this.ejecutando()) {
+      return;
+    }
+    // Con z-score, la normalizada; si el z-score ha dado error, no hay tabla.
+    const tabla = this.tablaAnalizar();
+    if (!tabla) {
+      this.errorCif.set(this.normalizada()?.error ?? 'No hay tabla que analizar.');
       return;
     }
 

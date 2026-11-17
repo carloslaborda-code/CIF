@@ -425,6 +425,98 @@
         </section>
       }
 
+      <!-- Normalización z-score (normalizar.ts). Opcional: la pidió el tutor para usar el
+           mismo dataset, con los mismos números, en otros algoritmos que la necesitan -->
+      @if (fusion()) {
+        <section class="tarjeta space-y-4" aria-labelledby="titulo-zscore">
+          <div class="max-w-3xl">
+            <h2 id="titulo-zscore" class="text-lg font-semibold text-slate-900">
+              Normalización z-score
+              <span
+                class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold"
+                [class]="zscore() ? 'bg-blue-100 text-blue-900' : 'bg-slate-200 text-slate-700'"
+              >
+                {{ zscore() ? 'Aplicada' : 'Sin normalizar' }}
+              </span>
+            </h2>
+            <p class="ayuda">
+              Opcional. Cambia cada valor por (valor − media) / desviación de su columna, para usar
+              el mismo dataset con otros algoritmos que necesitan los datos normalizados. Al
+              Isolation Forest no le cambia las anomalías (corta cada columna entre su mínimo y su
+              máximo), pero sí la estimación de árboles y umbral. La desviación es la poblacional
+              (÷N), como StandardScaler de scikit-learn.
+            </p>
+          </div>
+          <label class="flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="zscore"
+              class="casilla mt-0.5"
+              [checked]="zscore()"
+              (change)="cambiarZscore($any($event.target).checked)"
+            />
+            <span>
+              <span class="block text-sm font-semibold text-slate-900">
+                Aplicar z-score a todas las columnas
+              </span>
+              <span class="block text-sm text-slate-600">
+                Con la media y la desviación de estos datos. Se aplica después del procesado y la
+                codificación, a la tabla que recibe el Isolation Forest.
+              </span>
+            </span>
+          </label>
+
+          @if (normalizada(); as n) {
+            @if (n.error) {
+              <p class="aviso-error whitespace-pre-line" role="alert"><strong>Error:</strong> {{ n.error }}</p>
+            } @else {
+              <p class="text-sm text-slate-700" aria-live="polite">
+                {{ n.parametros.length }} columnas normalizadas.
+                @if (columnasConstantes(n.parametros) > 0) {
+                  {{ columnasConstantes(n.parametros) }} son constantes (desviación 0) y quedan a 0.
+                }
+              </p>
+              <details class="plegable">
+                <summary>Ver la media y la desviación de cada columna</summary>
+                <div class="plegable-contenido overflow-auto">
+                  <table class="tabla !min-w-0">
+                    <caption class="sr-only">Parámetros de la normalización z-score</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Columna</th>
+                        <th scope="col" class="!text-right">Media</th>
+                        <th scope="col" class="!text-right">Desviación</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (p of n.parametros; track p.columna) {
+                        <tr>
+                          <td class="font-mono">{{ p.columna }}</td>
+                          <td class="text-right tabular-nums">{{ numero(p.media, 4) }}</td>
+                          <td class="text-right tabular-nums">{{ numero(p.desviacion, 4) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+              <div class="flex flex-col gap-1">
+                <div>
+                  <button type="button" class="btn-secundario" (click)="descargarNormalizado()">
+                    Guardar el dataset normalizado (dataset_normalizado.csv)
+                  </button>
+                </div>
+                <p class="text-sm text-slate-600">
+                  Es la tabla que recibe el Isolation Forest, con todas las cifras y punto decimal.
+                  Sirve para otros algoritmos o para cargarla otra vez como «Una tabla ya hecha» sin
+                  volver a normalizar (entonces no marques esta casilla: ya está normalizada).
+                </p>
+              </div>
+            }
+          }
+        </section>
+      }
+
       <!-- Filtro de lecturas (solo formato largo): sigue visible aunque el filtro
            deje la tabla vacía, para poder corregirlo -->
       @if (lecturas(); as todas) {
@@ -458,7 +550,7 @@
 
       <div class="flex flex-wrap justify-between gap-3">
         <button type="button" class="btn-secundario" (click)="irA(1)">← Datos</button>
-        <button type="button" class="btn-primario" [disabled]="!fusion()" (click)="irA(3)">
+        <button type="button" class="btn-primario" [disabled]="!tablaAnalizar()" (click)="irA(3)">
           Continuar a los contextos →
         </button>
       </div>
@@ -644,8 +736,9 @@
 
           <!-- Estimación de árboles y umbral (procedimiento 2 del artículo) -->
           <section class="tarjeta" aria-label="Estimación de árboles y umbral">
+            <!-- Con z-score, la estimación se hace sobre la tabla normalizada (sí le afecta) -->
             <app-panel-estimacion
-              [tabla]="f"
+              [tabla]="tablaAnalizar() ?? f"
               [parametrosIF]="parametrosIF"
               [(ajustes)]="ajustesEstimacion"
               [(resultado)]="estimacion"
