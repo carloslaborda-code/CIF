@@ -102,24 +102,32 @@ export class Resultados {
 
   // --- Línea temporal ---
 
-  /** El eje x es la posición del registro; aquí se pasa a su fecha y hora. */
-  protected readonly formatoMomento = (posicion: number): string => {
-    const fila = this.resultado().filas[Math.round(posicion)];
+  /**
+   * El eje x es el número de registro (lo pidió el tutor: "el registro 960"). Si
+   * la tabla tiene fecha, se añade detrás, para el recuadro y la tabla de datos.
+   */
+  protected readonly formatoMomento = (registro: number): string => {
+    const filas = this.resultado().filas;
+    const fila = filas[Math.round(registro) - (filas[0]?.registro ?? 1)];
     if (!fila) {
-      return '';
+      return String(Math.round(registro));
+    }
+    if (this.resultado().sinFecha) {
+      return String(fila.registro);
     }
     // "2026-10-04T00:15:00.000Z" => "04/10 00:15". Si no es una fecha así, se deja como viene.
     const partes = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(fila.timestamp);
-    return partes
+    const momento = partes
       ? `${partes[3]}/${partes[2]} ${partes[4]}:${partes[5]}`
       : fila.timestamp.slice(0, 16);
+    return `${fila.registro} · ${momento}`;
   };
 
   protected readonly serieTiempo = computed<SerieLineas[]>(() => [
     {
       nombre: 'Score del IF global',
       color: 'var(--serie-1)',
-      puntos: this.resultado().filas.map((f, i) => ({ x: i, y: f.score })),
+      puntos: this.resultado().filas.map((f) => ({ x: f.registro, y: f.score })),
     },
   ]);
 
@@ -131,12 +139,12 @@ export class Resultados {
   protected readonly marcasTiempo = computed<MarcaPunto[]>(() => {
     const cortes = this.cortes();
     return this.resultado()
-      .filas.map((f, i) => ({ f, i, clase: clasificar(f, cortes) }))
+      .filas.map((f) => ({ f, clase: clasificar(f, cortes) }))
       .filter((x) => x.clase === 'grave' || x.f.anomalia)
       .sort((a, b) => b.f.score - a.f.score)
       .slice(0, MAX_MARCAS)
       .map((x) => ({
-        x: x.i,
+        x: x.f.registro,
         y: x.f.score,
         color: x.clase === 'grave' ? 'var(--estado-grave)' : 'var(--estado-limite)',
       }));

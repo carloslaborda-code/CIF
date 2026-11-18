@@ -55,7 +55,7 @@
         [attr.y]="ALTO - margen.abajo + 16"
         text-anchor="middle"
       >
-        {{ d.fila.id }}
+        {{ d.fila.registro }}
       </text>
     }
     <!-- Umbral -->
@@ -167,7 +167,7 @@
           [attr.y]="ALTO - margen.abajo + 16"
           text-anchor="middle"
         >
-          {{ d.fila.id }}
+          {{ d.fila.registro }}
         </text>
       }
       <text
@@ -197,8 +197,10 @@
       [style.left.%]="d.centro > ANCHO * 0.55 ? null : (d.centro / ANCHO) * 100 + 4"
       [style.right.%]="d.centro > ANCHO * 0.55 ? 100 - (d.centro / ANCHO) * 100 + 4 : null"
     >
-      <p class="font-medium text-slate-900">Registro n.º {{ d.fila.id }}</p>
-      <p class="whitespace-nowrap text-slate-600">{{ d.fila.timestamp }}</p>
+      <p class="font-medium text-slate-900">Registro {{ d.fila.registro }}</p>
+      @if (d.fila.timestamp !== '' + d.fila.registro) {
+        <p class="whitespace-nowrap text-slate-600">{{ d.fila.timestamp }}</p>
+      }
       <p class="flex items-center gap-2 whitespace-nowrap text-slate-700">
         <span class="h-2 w-2 rounded-sm bg-slate-700" aria-hidden="true"></span>
         IF global: <strong class="tabular-nums">{{ d.fila.score.toFixed(3) }}</strong>

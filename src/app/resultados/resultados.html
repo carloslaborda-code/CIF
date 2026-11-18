@@ -172,9 +172,9 @@
       </div>
       <div class="max-w-4xl">
         <app-grafico-lineas
-          descripcion="Score del Isolation Forest global de cada registro, en orden temporal, con el umbral"
+          descripcion="Score del Isolation Forest global de cada registro, por número de registro, con el umbral"
           [series]="serieTiempo()"
-          etiquetaX="Momento"
+          etiquetaX="Registro"
           etiquetaY="Score"
           [formatoX]="formatoMomento"
           [formatoY]="formato3"

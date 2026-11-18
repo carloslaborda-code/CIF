@@ -27,7 +27,7 @@
  *   - La combinación concatena los dos valores como texto (F1_F2). Como la
  *     codificación va después, el resultado se convierte en número con el
  *     diccionario. Si falta uno de los dos valores, el resultado es un hueco
- *     y lo trata la fase de nulos.
+ *     y fusionar.ts da un error (la herramienta no trata los nulos).
  *   - La hora, el día... se leen tal cual están escritos en el CSV, sin cambiar
  *     de zona horaria, igual que se hace al exportar los CSV.
  *   - Una característica es cualitativa si tiene algún valor que no es un número.

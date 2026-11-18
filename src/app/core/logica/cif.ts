@@ -45,8 +45,15 @@ export interface ResultadoParticion {
 
 /** Una fila de la tabla CIF. */
 export interface FilaCif {
-  /** Número de fila en la tabla (empieza en 1), como el ID de la Tabla 5. */
+  /** Número de fila en la tabla analizada (empieza en 1), como el ID de la Tabla 5. */
   id: number;
+  /**
+   * Número de registro: la fila de datos del CSV, desde 1. Con un rango de
+   * registros conserva la numeración original (no empieza en 1). Es lo que se
+   * enseña: el tutor identifica cada registro por este número.
+   */
+  registro: number;
+  /** Fecha de la fila; sin columna de fecha, el número de registro como texto. */
   timestamp: string;
   /** Score del IF global. */
   score: number;
@@ -76,6 +83,8 @@ export interface ResultadoCif {
   particiones: ResultadoParticion[];
   /** Una por fila de la tabla, en el mismo orden que la tabla. */
   filas: FilaCif[];
+  /** true si la tabla no tenía fecha (el timestamp es el número de registro). */
+  sinFecha: boolean;
   numAnomalias: number;
   celdasNoNumericas: number;
 }
@@ -226,6 +235,7 @@ export function ejecutarCif(
     const valores = brutos.map((s) => valorEnParticion(s, p.umbral));
     return {
       id: i + 1,
+      registro: (tabla.primerRegistro ?? 1) + i,
       timestamp: fila.timestamp,
       score: scores[i],
       anomalia: esAnomalia(scores[i], p.umbral),
@@ -246,6 +256,7 @@ export function ejecutarCif(
     contextos: structuredClone(contextos),
     particiones,
     filas,
+    sinFecha: tabla.sinFecha === true,
     numAnomalias: filas.filter((f) => f.anomalia).length,
     celdasNoNumericas,
   };
@@ -258,16 +269,17 @@ export function nombreParticion(r: ResultadoParticion): string {
 
 /**
  * CSV de la tabla CIF con todas las filas (en el orden de la tabla):
- * id, timestamp, anomalia, clase (grave, limite o normal), score, ii, ri, el valor de cada partición
- * (con umbral, como en pantalla) y después el score sin umbral de cada una.
+ * registro, timestamp (solo si hay fecha: sin fecha sería el mismo número), anomalia,
+ * clase (grave, limite o normal), score, ii, ri, el valor de cada partición (con
+ * umbral, como en pantalla) y después el score sin umbral de cada una.
  * La semilla va en el nombre del fichero y en el JSON de configuración.
  */
 export function cifACsv(r: ResultadoCif, cortes: CortesClasificacion = CORTES_POR_DEFECTO): string {
   const nombres = r.particiones.map(nombreParticion);
   return Papa.unparse({
     fields: [
-      'id',
-      'timestamp',
+      'registro',
+      ...(r.sinFecha ? [] : ['timestamp']),
       'anomalia',
       'clase',
       'score',
@@ -277,8 +289,8 @@ export function cifACsv(r: ResultadoCif, cortes: CortesClasificacion = CORTES_PO
       ...nombres.map((n) => `bruto ${n}`),
     ],
     data: r.filas.map((f) => [
-      f.id,
-      f.timestamp,
+      f.registro,
+      ...(r.sinFecha ? [] : [f.timestamp]),
       f.anomalia ? 1 : 0,
       clasificar(f, cortes),
       f.score,

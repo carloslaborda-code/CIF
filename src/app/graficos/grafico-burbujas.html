@@ -156,7 +156,11 @@
       </p>
       @for (f of d.ejemplos; track f.id) {
         <p class="whitespace-nowrap text-slate-700">
-          N.º {{ f.id }} · {{ f.timestamp }} · score
+          Registro {{ f.registro }}
+          @if (f.timestamp !== '' + f.registro) {
+            · {{ f.timestamp }}
+          }
+          · score
           <strong class="tabular-nums">{{ f.score.toFixed(3) }}</strong>
         </p>
       }

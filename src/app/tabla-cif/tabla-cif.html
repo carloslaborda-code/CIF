@@ -68,8 +68,11 @@
           <th scope="col" class="px-3 py-2 text-left">
             <abbr title="Anomalía en el Isolation Forest global">Anomalía</abbr>
           </th>
-          <th scope="col" class="px-3 py-2 text-right">N.º</th>
-          <th scope="col" class="px-3 py-2 text-left">Momento</th>
+          <th scope="col" class="px-3 py-2 text-right">Registro</th>
+          <!-- Sin fecha, el momento es el propio número de registro -->
+          @if (!resultado().sinFecha) {
+            <th scope="col" class="px-3 py-2 text-left">Momento</th>
+          }
           <th scope="col" class="px-3 py-2 text-right">
             <abbr title="Score del Isolation Forest global">Score</abbr>
           </th>
@@ -102,8 +105,10 @@
             <td class="px-3 py-1.5" [class.font-semibold]="f.anomalia">
               {{ f.anomalia ? 'Sí' : 'No' }}
             </td>
-            <td class="px-3 py-1.5 text-right">{{ f.id }}</td>
-            <td class="whitespace-nowrap px-3 py-1.5 text-slate-700">{{ f.timestamp }}</td>
+            <td class="px-3 py-1.5 text-right">{{ f.registro }}</td>
+            @if (!resultado().sinFecha) {
+              <td class="whitespace-nowrap px-3 py-1.5 text-slate-700">{{ f.timestamp }}</td>
+            }
             <td
               class="px-3 py-1.5 text-right"
               [style.background-color]="color(f.score, escalaScore())"
