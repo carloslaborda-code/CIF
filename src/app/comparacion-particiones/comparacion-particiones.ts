@@ -32,7 +32,7 @@ export class ComparacionParticiones {
       // Las particiones de este contexto ocupan estas posiciones de `valores`.
       const desde = inicio;
       const hasta = inicio + c.particiones.length;
-      const afectada = (f: FilaCif) => f.valores.slice(desde, hasta).some((v) => v > 0);
+      const afectada = (f: FilaCif) => f.valores.slice(desde, hasta).some((v) => v !== null);
       inicio = hasta;
       return {
         nombre: c.nombre,

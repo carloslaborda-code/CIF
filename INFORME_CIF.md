@@ -10,9 +10,9 @@ Implementación del método del artículo *Contextual Isolation Forests: Context
 
 - **Implementado y comprobado:**
   - **Preparación de datos:** procesado de características, valores nulos y contextos, en el orden de la Fig. 1.
-  - **Explicabilidad por contexto:** IF global y por partición, RI, II, Tabla 5, Fig. 8, Fig. 9 y clasificación grave / límite / normal.
+  - **Explicabilidad por contexto:** IF global y por partición, RI, II, Tabla 5 y Fig. 9.
 
-  Hay 120 pruebas automáticas, todas superadas. Un caso con semilla fija sobre datos reales da en la aplicación exactamente los mismos números que por consola.
+  Hay 123 pruebas automáticas, todas superadas. Un caso con semilla fija sobre datos reales da en la aplicación exactamente los mismos números que por consola.
 - **Los valores nulos se tratan fuera de la herramienta**, como indicó el tutor. Si al CSV le falta algún dato, la herramienta dice en qué registros («En el registro 42589 faltan datos») y no deja seguir, porque el Isolation Forest no puede ejecutarse con datos incompletos. Ya no rellena huecos.
 - **Cada fila se identifica por su número de registro**, como indicó el tutor. Se puede cargar una tabla sin columna de fecha (como la pestaña 3 del Excel), elegir un rango de registros y los resultados dicen «Registro 960».
 - **Z-score opcional**, como pidió el tutor para comparar con otros algoritmos usando el mismo dataset: se puede normalizar, guardar el dataset normalizado, guardar la media y la desviación de cada columna y aplicarlas a otros datos (febrero con las de enero). Al Isolation Forest no le cambia las anomalías.
@@ -28,7 +28,7 @@ Implementación del método del artículo *Contextual Isolation Forests: Context
 | Sin z-score | **Z-score opcional** con parámetros que se guardan y se cargan (D23 a D25) |
 | `12,5` (coma decimal, como exporta Excel en español) se tomaba como texto | Se lee como número (D26) |
 | Para volver a cargar los datos había que pivotar otra vez el CSV largo | Botón para guardar el dataset en columnas y cargarlo como «Una tabla ya hecha» (solo si no le faltan datos) |
-| 89 pruebas | 120 pruebas |
+| 89 pruebas | 123 pruebas |
 
 ---
 
@@ -52,10 +52,9 @@ Es una aplicación web (Angular) que funciona entera en el navegador, sin servid
    Se puede filtrar por tipo de medida, sensor o aulario sin volver a leer el CSV.
 3. **Contextos.** Un contexto es un punto de vista (por ejemplo "por tipo de suministro" o "por edificio") y sus particiones son grupos de columnas. Se pueden crear a mano o automáticamente por tipo.
 4. **Ajustes.** Parámetros del Isolation Forest y semilla.
-5. **Resultados.** Un resumen (registros, anomalías globales, graves y límite) y seis pestañas. Cada fila se identifica por su número de registro:
+5. **Resultados.** Un resumen (registros y anomalías globales) y cinco pestañas. Cada fila se identifica por su número de registro:
    - la tabla CIF (como la Tabla 5);
-   - el mapa RI–II (Fig. 9);
-   - global frente a particiones (Fig. 8);
+   - el mapa RI–II (Fig. 9), con los cortes de RI e II que deciden qué es anomalía CIF;
    - el score en el tiempo;
    - la comparación de contextos;
    - las descargas.
@@ -66,19 +65,18 @@ Para cada momento la herramienta da:
 |---|---|---|
 | **Score** | Lo raro que es mirando todas las columnas a la vez (0–1) | Isolation Forest sobre todos los datos |
 | **RI** (recurrencia) | En qué parte de los grupos aparece la anomalía: 0 = en ninguno, 1 = en todos. Indica si el problema es local o general | Particiones donde el score supera el umbral ÷ total de particiones (Ec. 1) |
-| **II** (intensidad) | Lo fuerte que es en esos grupos. Indica si es grave | Mediana de los scores de todas las particiones, contando 0 donde no es anomalía (Ec. 2 y 3) |
-| **Clase** | Grave, límite o normal | Grave si RI > 0,25 e II > 0. Límite si no es grave pero sale en alguna partición o en el IF global. Normal en el resto (apartado 5) |
+| **II** (intensidad) | Lo fuerte que es en esos grupos | Media de los scores de las particiones donde es anomalía (se divide entre esas particiones, no entre el total). Nunca vale 0; si no es anomalía en ninguna partición, en blanco. Se calcula para todos los registros, como RI |
 
 Además de lo que pide el artículo, la herramienta añade:
-- **Reproducibilidad:** cada ejecución guarda su semilla. El JSON de configuración guarda todo: columnas, si el CSV tiene fecha, filtro, rango, procesado, z-score con sus parámetros, parámetros del IF, semilla, contextos y cortes. Quien lo cargue con el mismo CSV obtiene exactamente el mismo resultado.
+- **Reproducibilidad:** cada ejecución guarda su semilla. El JSON de configuración guarda todo: columnas, si el CSV tiene fecha, filtro, rango, procesado, z-score con sus parámetros, parámetros del IF, semilla, contextos y cortes de RI e II. Quien lo cargue con el mismo CSV obtiene exactamente el mismo resultado.
 - **Descargas:**
-  - la tabla CIF completa, con las columnas `registro` y `clase`;
+  - la tabla CIF completa, con las columnas `registro` y `anomalia_cif`;
   - el resumen por partición;
   - la tabla preparada (`2_fusionado.csv`, en el formato del visualizador de Emilia);
   - el dataset en columnas (`dataset.csv`), para no pivotar otra vez el CSV largo;
   - el dataset normalizado (`dataset_normalizado.csv`) y sus parámetros (`parametros_zscore.csv`);
   - `columnas.csv`, con el sensor y el aulario de cada columna.
-- **Comparación de contextos y particiones:** anomalías por grupo, score medio y máximo, y qué contexto detecta cada anomalía global.
+- **Comparación de contextos y particiones:** anomalías por grupo, score medio de sus anomalías, score máximo y qué contexto detecta cada anomalía global.
 - **Avisos:** cuando no sale ninguna anomalía o cuando hay columnas constantes.
 
 ---
@@ -91,8 +89,7 @@ Además de lo que pide el artículo, la herramienta añade:
 | | Valores nulos | 🟡 Por indicación del tutor, **fuera de la herramienta**: los nulos se tratan antes de cargar el CSV. Si falta un dato, la herramienta avisa con el registro y no deja seguir (D20). Con el rango de registros se puede elegir una época sin huecos |
 | | Contextos y particiones (con pesos) | ✅ Hecho. Los pesos se guardan pero no se usan en RI ni II, igual que en el artículo |
 | **Explicabilidad por contexto** | IF global y por partición, RI, II y Tabla 5 | ✅ Hecho |
-| | Fig. 8 (global frente a particiones) y Fig. 9 (burbujas RI–II) | ✅ Hecho |
-| | Clasificación grave / límite / normal (RI > 0,25 y II > 0) | ✅ Hecho. Los cortes se pueden cambiar en pantalla |
+| | Fig. 9 (burbujas RI–II) | ✅ Hecho, con la forma de la figura y los cortes que indicó el tutor: un círculo por registro que es anomalía en alguna partición, radio según el score global, y los que pasan los dos cortes son anomalías CIF (D18 y D28) |
 
 ### Cómo funciona la preparación de datos
 
@@ -102,28 +99,27 @@ Las fases se aplican en el orden de la Fig. 1: primero el procesado y al final l
 
 ## 4. Cómo se ha comprobado que es correcto
 
-Hay 120 pruebas automáticas en `cif/pruebas/`. Se ejecutan con `npm test` en unos segundos y todas usan semillas fijas, así que dan siempre los mismos números. La carpeta `pruebas/` no se sube a git.
+Hay 123 pruebas automáticas en `cif/pruebas/`. Se ejecutan con `npm test` en unos segundos y todas usan semillas fijas, así que dan siempre los mismos números. La carpeta `pruebas/` no se sube a git.
 
 | Prueba | Qué comprueba | Resultado |
 |---|---|---|
-| **A · Fórmulas** | Se meten los valores por partición de las 10 filas de la Tabla 5 del artículo | Las 10 filas dan el mismo RI, II y anomalía sí/no que el artículo |
+| **A · Fórmulas** | Se meten los valores por partición de las 10 filas de la Tabla 5 del artículo | Las 10 filas dan el mismo RI y anomalía sí/no que el artículo. II es la media de las particiones donde es anomalía, y va en blanco si no lo es en ninguna. También el ejemplo del tutor (RI = 3/10, II = media de 0,72, 0,75 y 0,91) |
 | **B · Montaje** | Cada partición ve solo sus columnas; la misma semilla da el mismo resultado; las columnas constantes se quitan bien; las validaciones funcionan | Todas correctas |
 | **C · Red simulada** | Una red como la del artículo (4 zonas × 4 medidas = 16 sensores, 2.000 momentos) con 20 averías de un solo sensor y una de toda la red, repetida con 5 semillas | Con 100 árboles: **98 de 100** averías señaladas en sus particiones, **0 de 600** en particiones ajenas y **0 de 9.895** momentos normales marcados por error. La avería de toda la red sale la primera, con RI entre 0,75 y 1 |
 | **D · Comparación de motores** | El IF de Emilia frente a un IF hecho por separado ([`isolation-forest-propio/`](../isolation-forest-propio/)) sobre los mismos datos (`npm run comparar`) | Con el consumo de agua real ordenan los momentos igual (correlación 0,96, la misma que cada motor consigo mismo con otra semilla). Aquí apareció el fallo de las columnas constantes (D7) |
 | **E · Filtro y configuración** | El filtro por tipo, sensor y aulario; que el JSON guardado se lea igual; que los JSON antiguos sigan funcionando, también los de antes de la preparación | Todo correcto |
-| **F · Clasificación** | La clasificación de las filas de la Tabla 5 | Las filas de la Tabla 5 se clasifican igual que en el artículo |
-| **G · Preparación de datos** | Lectura de fechas; las cuatro operaciones del procesado; que una columna que no es numérica dé error con su nombre; el orden de la Fig. 1 con CSV largo y pivotado; la coma decimal; que un dato que falta dé error con su registro y su momento | Todas correctas. De `DD/MM/YYYY HH:MIN` salen DD, MM, HH y MIN como en 4.2.1. `12,5` y `1,72E-02` se leen como números |
-| **H · Datos en columnas y celdas vacías** | Guardar el dataset y volver a cargarlo da lo mismo que el CSV largo; tabla sin columna de fecha (como la pestaña 3); el aviso de celdas vacías (registro, columnas, total, filas vacías del final) | Todas correctas |
-| **I · Rango de registros** | Enero (1–8928) da 8.928 filas; febrero empieza en el registro 8929; en el CSV largo, un hueco fuera del rango no bloquea; los resultados y el CSV llevan el registro original | Todas correctas |
-| **J · Z-score** | Mismos números que `StandardScaler` de scikit-learn; media 0 y desviación 1; febrero con los parámetros de enero; guardar y cargar los parámetros y el dataset normalizado da los mismos números cifra a cifra; con la misma semilla, el CIF da las mismas anomalías con y sin z-score | Todas correctas |
+| **F · Preparación de datos** | Lectura de fechas; las cuatro operaciones del procesado; que una columna que no es numérica dé error con su nombre; el orden de la Fig. 1 con CSV largo y pivotado; la coma decimal; que un dato que falta dé error con su registro y su momento | Todas correctas. De `DD/MM/YYYY HH:MIN` salen DD, MM, HH y MIN como en 4.2.1. `12,5` y `1,72E-02` se leen como números |
+| **G · Datos en columnas y celdas vacías** | Guardar el dataset y volver a cargarlo da lo mismo que el CSV largo; tabla sin columna de fecha (como la pestaña 3); el aviso de celdas vacías (registro, columnas, total, filas vacías del final) | Todas correctas |
+| **H · Rango de registros** | Enero (1–8928) da 8.928 filas; febrero empieza en el registro 8929; en el CSV largo, un hueco fuera del rango no bloquea; los resultados y el CSV llevan el registro original | Todas correctas |
+| **I · Z-score** | Mismos números que `StandardScaler` de scikit-learn; media 0 y desviación 1; febrero con los parámetros de enero; guardar y cargar los parámetros y el dataset normalizado da los mismos números cifra a cifra; con la misma semilla, el CIF da las mismas anomalías con y sin z-score | Todas correctas |
 
 **Comprobación en la aplicación.** Hecha antes de quitar el relleno de huecos: hoy esos dos ficheros ya no se pueden analizar enteros porque les faltan datos (apartado 5.3). Se cargaron juntos los dos ficheros de 3 meses, con el contexto automático por tipo (2 particiones: agua con 75 columnas y electricidad con 128), 10 árboles y semilla 1. La pantalla dio exactamente lo calculado por consola:
 
 | | Esperado | En la aplicación |
 |---|---|---|
 | Tabla preparada | 8.628 filas × 207 columnas, 101.331 huecos rellenados | Igual |
-| Umbral 0,70 | 0 anomalías globales, 11 graves, 0 límite | Igual |
-| Umbral 0,39 | 4.103 anomalías globales, 4.232 graves, 561 límite | Igual |
+| Umbral 0,70 | 0 anomalías globales | Igual |
+| Umbral 0,39 | 4.103 anomalías globales | Igual |
 
 Los datos del artículo son confidenciales. Por eso la prueba C usa una red simulada: así sabemos qué debería detectarse y podemos medir el porcentaje de aciertos.
 
@@ -210,7 +206,7 @@ Las 9.040 celdas vacías están en 949 registros, en 8 tramos:
 | **D1** | No modificar el Isolation Forest de Emilia. La semilla se consigue sustituyendo `Math.random` por un generador con semilla solo mientras se ejecuta su código | Respetar el trabajo del TFG y poder seguir usando su librería tal cual | Copiar y modificar su código, o usar nuestro IF propio |
 | **D2** | La semilla se registra siempre, sea fija o aleatoria. La partición *k* usa semilla + *k*. Existe un JSON de configuración que se puede volver a cargar | Que cualquier resultado se pueda repetir y compartir | Guardar la semilla solo si es fija |
 | **D3** | El tamaño de muestra de cada árbol es el mínimo entre el pedido (256) y el número de filas | Es lo que hace el IF original. Con menos de 256 filas, el IF de Emilia normalizaba con 256 y los scores salían más bajos de lo debido | Pasar siempre 256 |
-| **D4** | Valor de un momento en una partición = su score si supera el umbral, si no 0. RI e II se calculan para todos los momentos, no solo para las anomalías globales | Así lo muestra la Tabla 5, que enseña RI también en momentos no anómalos (casos límite como el 27308) | Calcularlos solo para las anomalías globales |
+| **D4** | Valor de un momento en una partición = su score si supera el umbral; si no, **en blanco**. RI = particiones donde es anomalía ÷ total. II = **media** de los scores de las particiones donde es anomalía, dividida entre esas particiones; si no hay ninguna, en blanco. RI e II se calculan para **todos** los momentos, sean o no anomalía global | Lo indicó el tutor: un score nunca vale 0 (ni 1), así que un 0 confunde; II es la media y no la mediana («error nuestro en la traducción»); y un registro que no es anomalía global puede serlo en alguna partición. El texto del artículo (4.4), la Tabla 5 y la Fig. 9 usan la mediana contando los 0 | La mediana contando los 0, como en la Tabla 5 |
 | **D5** | Anomalía = score **mayor** que el umbral (no mayor o igual) | En la Tabla 5, el registro 32708 tiene score 0,70 y figura como no anomalía | ≥ umbral |
 | **D6** | Se quita el paso "Isolation Forest global" suelto | El CIF ya incluye el IF global (columna IF Sc). Tenerlo aparte era redundante | Mantener dos sitios donde ejecutar lo mismo |
 | **D7** | Opción **"Quitar columnas constantes"**, activada por defecto y explicada en la pantalla | Con una columna que nunca cambia, el IF de Emilia deja de dividir esa rama en lugar de probar otra, y los scores se aplastan hacia 0,5. Medido con 4 sensores con datos y 12 constantes: las anomalías pasan de **0,55 a 0,85** al quitarlos. Una columna constante no aporta información, y scikit-learn también las salta | Dejarlo como está, o modificar el código de Emilia |
@@ -219,12 +215,12 @@ Las 9.040 celdas vacías están en 949 registros, en 8 tramos:
 | **D10** | Los CSV de datos no llevan metadatos. La semilla va en el nombre del fichero y en el JSON, y `columnas.csv` va aparte | `2_fusionado.csv` lo lee el visualizador de Emilia; añadir filas o cambiar cabeceras lo rompería | Meter semilla, filtro o alias dentro del CSV |
 | **D11** | Pruebas con el ejecutor que trae Node (`node --test`) y esbuild, sin dependencias nuevas | Cuando se hicieron, `npm install` fallaba en este equipo con un error interno de npm ("edgesOut"). Ahora una instalación de prueba (`--dry-run`) ya funciona, pero las pruebas no necesitan nada más y se han dejado así | Instalar Vitest |
 | **D12** | Las carpetas `cif/datasets/` y `cif/pruebas/` están fuera de git | Los datasets ocupan cientos de MB y GitHub rechaza ficheros de más de 100 MB | Subirlos o usar Git LFS |
-| **D13** | Gráficos en SVG hechos a mano, sin librería. Cada uno tiene recuadro con los valores exactos (con ratón y con teclado) y tabla alternativa | **Fidelidad:** reproducen las Fig. 8 y 9 tal cual. **Accesibilidad:** el SVG se recorre con teclado; Chart.js o ECharts dibujan en un `<canvas>`, que un lector de pantalla no puede leer. **Sin dependencias:** la aplicación pesa menos (una librería como Chart.js añade del orden de 200 KB a los ~340 KB actuales) | Usar una librería de gráficos. Daría zoom y animaciones, que el artículo no necesita |
+| **D13** | Gráficos en SVG hechos a mano, sin librería. Cada uno tiene recuadro con los valores exactos (con ratón y con teclado) y tabla alternativa | **Fidelidad:** reproducen la Fig. 9 tal cual. **Accesibilidad:** el SVG se recorre con teclado; Chart.js o ECharts dibujan en un `<canvas>`, que un lector de pantalla no puede leer. **Sin dependencias:** la aplicación pesa menos (una librería como Chart.js añade del orden de 200 KB a los ~340 KB actuales) | Usar una librería de gráficos. Daría zoom y animaciones, que el artículo no necesita |
 | **D14** | El procesado por defecto es el del experimento del artículo: DD, MM, HH y MIN de la fecha | Es lo que hace el artículo (4.2.1). Así el IF sabe a qué hora y en qué época pasa cada lectura | No procesar nada por defecto |
 | **D15** | **Combinar** une los dos valores como texto con `_` (`zona1` + `bomba` → `zona1_bomba`). Si falta uno, el resultado es un hueco | El artículo no dice cómo se combinan. Sirve para cualquier tipo de dato y no supone nada sobre unidades. El resultado es texto, así que la tabla da error si esa columna se queda | Sumar las dos columnas (solo tiene sentido si miden lo mismo) |
 | **D16** | Las fechas se leen tal como están escritas en el CSV (ISO o `DD/MM/YYYY HH:MM:SS`), sin cambiar de zona horaria | Mismo criterio que al exportar los CSV. El resultado no depende de la zona horaria del ordenador | Convertir a hora local |
 | **D17** | Un JSON de configuración anterior a la preparación de datos no procesa nada | Así repite exactamente el resultado que dio cuando se guardó | Aplicarle el procesado por defecto |
-| **D18** | En el mapa RI–II, los registros de clases distintas que caen en el mismo punto van en burbujas distintas. Las etiquetas "×N" que se pisarían no se escriben (el número sigue en el recuadro y en la tabla) y hay un margen alrededor para no tapar los ejes | Con muchos registros en el origen se mezclaban normales y límite en una sola burbuja amarilla, y las etiquetas no se podían leer | Juntar todo el punto en una burbuja del color de la clase más alta |
+| **D18** | El mapa RI–II tiene la forma de la Fig. 9 (ejes, fondo de verde a rojo, círculos semitransparentes) y dibuja **todos** los registros que son anomalía en alguna partición. Los que no lo son en ninguna no tienen II y no salen; se dice cuántos son | El tutor explicó que en la gráfica se ven todos los registros y que el radio es el score global: uno grande puede quedar abajo a la izquierda y uno pequeño arriba a la derecha | Solo los 10 de más score, como la figura |
 | **D19** | El código se publica con **licencia MIT** (fichero `LICENSE`). La carpeta `core/lib/isolation-forest/` queda fuera de esa licencia: es de Emilia Rouanet Feliu y se incluye sin cambios, con su permiso y citándola como autora en el README | La MIT es la licencia libre más habitual en proyectos JavaScript y Angular y deja reutilizar la herramienta sin trabas. El código de Emilia no se puede relicenciar sin su permiso, y ella solo pidió que se la mencione | GPL-3.0 (obliga a publicar el código de las versiones modificadas); publicar sin licencia (nadie podría reutilizarlo legalmente) |
 | **D20** | **No se rellenan huecos.** Si falta un dato (también la fecha, filas cortas o una fila vacía en medio), se avisa con el total y los 10 primeros registros, con sus columnas, y no se sigue. Vale para los dos formatos: en el largo se comprueba al pivotar y el aviso da también el momento. Si los datos se han leído, se puede ir igualmente al paso 2 para cambiar el filtro o el rango. Las filas vacías del final que deja Excel no cuentan | Lo indicó el tutor: los nulos se tratan antes de pasar el CSV a la herramienta y, si faltan datos, el Isolation Forest no puede ejecutarse | Seguir rellenando con 0 o con el valor anterior |
 | **D21** | Cada fila se identifica por su **número de registro**: la fila de datos del CSV, desde 1. Una tabla puede no tener columna de fecha. La tabla, los gráficos y el CSV de resultados enseñan el registro; con fecha, también el momento | Lo indicó el tutor: la fecha no se usa en los algoritmos y basta con saber que es el registro 960 | Exigir siempre una columna de fecha |
@@ -233,6 +229,8 @@ Las 9.040 celdas vacías están en 949 registros, en 8 tramos:
 | **D24** | El z-score se aplica a **todas las columnas** de la tabla que recibe el IF, después del procesado. Una columna constante queda a 0 | El tutor pidió «subir un dataset y aplicarle el z-score». Dejar a 0 una columna constante es lo que hace `StandardScaler` y evita dividir entre 0 | Elegir columnas una a una |
 | **D25** | Los parámetros del z-score se guardan en CSV (`columna;media;desviacion`) con todas las cifras. Si a unos parámetros cargados les falta una columna de la tabla, es un error; si traen columnas de más, se avisa y se sigue. Se mantienen al cambiar de CSV y van en el JSON de configuración | Lo pidió el tutor para normalizar febrero con los parámetros de enero. Con todas las cifras, cargar los parámetros da exactamente los mismos números | Recalcular la normalización con cada conjunto de datos |
 | **D26** | Se acepta la **coma decimal** (`12,5`, `1,72E-02`): si hay una sola coma y ningún punto, la coma es el decimal. No se acepta separador de miles | Excel en español guarda los CSV con `;` y coma decimal. Los formatos del Excel del tutor (General y `0.0000`) no ponen separador de miles | Exigir punto decimal |
+| **D27** | El **score medio** del resumen por partición es el de **sus anomalías** (los scores que pasan el umbral), no el de todos los registros. Si la partición no tiene ninguna, en blanco | Lo indicó el tutor | Media de todos los registros |
+| **D28** | **Anomalía CIF:** RI mayor que un corte **e** II mayor que otro. Los cortes se cambian en el mapa y van en el JSON. Por defecto, RI 0,25 (el del artículo) e **II en el umbral del IF** (0,70), porque II es la media de scores que superan el umbral y siempre es mayor que él. No tiene por qué coincidir con la anomalía global: tabla y CSV llevan las dos | Lo indicó el tutor: «se fija un RI y un II en la gráfica y los que tienen RI e II superior son anomalías». Los valores por defecto están pendientes de confirmar | II en 0, como el artículo (con la media no separaría nada) |
 
 ---
 
@@ -245,7 +243,7 @@ Las 9.040 celdas vacías están en 949 registros, en 8 tramos:
 5. **Los datos con huecos no se pueden analizar sin tratarlos antes.** Es lo que indicó el tutor, pero hoy deja fuera los 8 CSV de la UA enteros y la pestaña 3 entera (apartado 5.3). Se pueden usar trozos sin huecos con el rango de registros (en el formato largo) o recortándolos en Excel (en el ya pivotado).
 6. **En el formato largo, el número de registro depende del filtro.** El registro es la fila de la tabla alineada después de filtrar: si se quita un tipo de medida, puede cambiar la lista de momentos y con ella la numeración. Por eso el aviso de huecos da también el momento.
 7. **Con una sola partición, RI solo puede valer 0 o 1** y el mapa RI–II se queda en dos líneas. Pasa con el contexto automático por tipo si el CSV tiene un solo tipo, como cada fichero de 3 meses por separado. Para que RI e II digan algo hacen falta contextos con varias particiones con sentido.
-8. **El z-score no cambia las anomalías del Isolation Forest**, porque el IF corta cada columna entre su mínimo y su máximo y la escala no le afecta (prueba J4). Sirve para usar el mismo dataset con otros algoritmos, que es para lo que lo pidió el tutor.
+8. **El z-score no cambia las anomalías del Isolation Forest**, porque el IF corta cada columna entre su mínimo y su máximo y la escala no le afecta (prueba I4). Sirve para usar el mismo dataset con otros algoritmos, que es para lo que lo pidió el tutor.
 
 ---
 
@@ -253,7 +251,7 @@ Las 9.040 celdas vacías están en 949 registros, en 8 tramos:
 
 Respondidas:
 - **P2** (¿más histórico?): se han conseguido 3 meses de agua y electricidad.
-- **P7** (¿figuras y clasificación?): hechas.
+- **P7** (¿figuras?): hechas.
 - **P8** (¿cómo se rellenan los huecos?): no se rellenan; los nulos se tratan antes de cargar el CSV (D20).
 - **Z-score** (¿se pone aunque no cambie las anomalías?): sí, opcional, con parámetros que se guardan y se cargan (D23 a D25).
 - **Fecha** (¿pestaña 1 o 3?): no hace falta; se usa el número de registro (D21).
@@ -286,7 +284,7 @@ Dentro de `cif/`:
 | Comando | Qué hace |
 |---|---|
 | `npm start` | Abre la herramienta en el navegador (http://localhost:4200) |
-| `npm test` | Ejecuta las 120 pruebas |
+| `npm test` | Ejecuta las 123 pruebas |
 | `npm run comparar` | Compara el IF de Emilia con el IF propio (por defecto con `datasets/ConsumoAgua.csv`; otro fichero: `npm run comparar -- datasets/Solar.csv`) |
 
 Los datasets van en `cif/datasets/`. Ni los datasets ni las pruebas se suben a git (D12): para repetir las pruebas hay que copiar aparte la carpeta `cif/pruebas/`, y `npm run comparar` necesita además la carpeta `isolation-forest-propio/` al lado de `cif/`.
@@ -305,7 +303,6 @@ Los datasets van en `cif/datasets/`. Ni los datasets ni las pruebas se suben a g
 | `aplicar-isolation-forest.ts` | Parámetros y llamada al IF de Emilia con semilla |
 | `semilla.ts` | Generador con semilla y sustitución temporal de `Math.random` |
 | `cif.ts` | El CIF: IF global, IF por partición, RI, II, columnas constantes y exportación |
-| `clasificar.ts` | Clasificación grave / límite / normal |
 | `configuracion.ts` | JSON de configuración (guardar y cargar) |
 | `../lib/isolation-forest/` | Isolation Forest de Emilia Rouanet, **sin modificar** |
 

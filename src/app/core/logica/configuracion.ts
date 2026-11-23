@@ -5,8 +5,8 @@
  *
  * Se descarga desde la página y se puede volver a cargar en ella.
  */
-import { CORTES_POR_DEFECTO, CortesClasificacion, validarCortes } from './clasificar';
 import type { Contexto } from './contextos';
+import { cortesPorDefecto, CortesCif, validarCortes } from './cortes';
 import { CampoFiltro, FiltroLecturas, SIN_FILTRO } from './filtrar';
 import type { ParametrosColumnas } from './pivotar';
 import { OPCIONES_EXTRACCION, Operacion, Preparacion, SIN_PREPARACION } from './preparar';
@@ -71,8 +71,8 @@ export interface ConfiguracionCif {
   /** Semilla usada. null si se guardó antes de ejecutar y sin semilla fija. */
   semilla: number | null;
   contextos: Contexto[];
-  /** Cortes de RI e II para clasificar en grave, límite o normal. */
-  cortes: CortesClasificacion;
+  /** Cortes de RI e II del mapa: por encima de los dos, anomalía CIF. */
+  cortes: CortesCif;
 }
 
 /** Texto JSON (con sangría para que se pueda leer y editar a mano). */
@@ -222,8 +222,9 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     }
   }
 
-  // Los cortes se añadieron después: si faltan, los del artículo.
-  const cortes: CortesClasificacion = { ...CORTES_POR_DEFECTO };
+  // Los cortes se añadieron después: si faltan, los de por defecto (RI 0,25 e II
+  // en el umbral del Isolation Forest).
+  const cortes: CortesCif = cortesPorDefecto(p.umbral);
   if (typeof d.cortes === 'object' && d.cortes !== null) {
     if (typeof d.cortes.ri === 'number') cortes.ri = d.cortes.ri;
     if (typeof d.cortes.ii === 'number') cortes.ii = d.cortes.ii;

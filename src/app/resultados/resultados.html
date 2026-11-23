@@ -1,5 +1,5 @@
 <!-- Resumen: lo primero que se ve -->
-<dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+<dl class="grid gap-3 sm:grid-cols-3">
   <div class="dato">
     <dt class="dato-nombre">Registros analizados</dt>
     <dd class="dato-valor">{{ numero(resultado().filas.length) }}</dd>
@@ -13,13 +13,14 @@
       </span>
     </dd>
   </div>
-  <div class="dato !border-red-200 !bg-red-50">
-    <dt class="dato-nombre"><span aria-hidden="true">▲</span> Graves</dt>
-    <dd class="dato-valor">{{ numero(clases().grave) }}</dd>
-  </div>
-  <div class="dato !border-amber-200 !bg-amber-50">
-    <dt class="dato-nombre"><span aria-hidden="true">◆</span> Límite</dt>
-    <dd class="dato-valor">{{ numero(clases().limite) }}</dd>
+  <div class="dato">
+    <dt class="dato-nombre">Anomalías CIF (RI &gt; {{ cortes().ri }} e II &gt; {{ cortes().ii }})</dt>
+    <dd class="dato-valor">
+      {{ numero(numAnomaliasCif()) }}
+      <span class="text-sm font-normal text-slate-600">
+        {{ porcentaje(numAnomaliasCif() / resultado().filas.length, 1) }}
+      </span>
+    </dd>
   </div>
 </dl>
 
@@ -37,7 +38,7 @@
   }
 </p>
 
-@if (resultado().numAnomalias === 0 && clases().grave === 0 && clases().limite === 0) {
+@if (resultado().numAnomalias === 0 && !hayEnParticiones()) {
   <p class="aviso-info">
     <span>
       <strong>No ha salido ninguna anomalía.</strong> Ningún registro supera el umbral
@@ -91,15 +92,18 @@
 
     @case ('mapa') {
       <div class="max-w-3xl">
-        <h3 class="text-base font-semibold text-slate-900">Recurrencia e intensidad</h3>
+        <h3 class="text-base font-semibold text-slate-900">
+          Recurrencia e intensidad de la propagación anómala
+        </h3>
         <p class="ayuda">
-          Cada burbuja son los registros con ese RI y ese II. Arriba a la derecha están los graves:
-          salen en muchas particiones y con fuerza. Pegados al eje izquierdo, los casos límite.
+          Cada registro que es anomalía en alguna partición, según su II y su RI. El tamaño es su
+          score global. Los que quedan por encima de los dos cortes son anomalías CIF, sean o no
+          anomalía global.
         </p>
       </div>
-      <!-- Cortes de la clasificación: cambian el mapa, la tabla y el CSV -->
+      <!-- Cortes de RI e II: deciden qué es anomalía CIF en el mapa, la tabla y el CSV -->
       <fieldset class="flex flex-wrap items-end gap-4 rounded-lg border border-slate-200 p-4">
-        <legend class="px-1 text-sm font-medium text-slate-800">Un registro es grave si…</legend>
+        <legend class="px-1 text-sm font-medium text-slate-800">Es anomalía CIF si…</legend>
         <label class="etiqueta">
           RI es mayor que
           <input
@@ -118,53 +122,28 @@
             type="number"
             min="0"
             max="1"
-            step="0.05"
+            step="0.01"
             [(ngModel)]="corteIi"
           />
         </label>
         @if (cortesCambiados()) {
           <button type="button" class="btn-secundario" (click)="restablecerCortes()">
-            Volver a los de por defecto (0,25 y 0)
+            Volver a los de por defecto ({{ cortesDefecto().ri }} y {{ cortesDefecto().ii }})
           </button>
         }
+        <p class="ayuda w-full">
+          II es la media de los scores que superan el umbral ({{ resultado().umbral }}), así que
+          siempre es mayor que él: un corte de II por debajo del umbral no separa nada.
+        </p>
       </fieldset>
       <app-grafico-burbujas [filas]="resultado().filas" [cortes]="cortes()" />
-    }
-
-    @case ('particiones') {
-      <div class="flex flex-wrap items-end justify-between gap-4">
-        <div class="max-w-3xl">
-          <h3 class="text-base font-semibold text-slate-900">
-            Score global frente a las particiones
-          </h3>
-          <p class="ayuda">
-            Los registros con más score global: arriba, su score en el Isolation Forest de toda la
-            tabla; abajo, su valor en cada partición (0 si no supera el umbral). Un registro con
-            muchas barras abajo aparece en muchos grupos de sensores.
-          </p>
-        </div>
-        <label class="etiqueta">
-          Registros
-          <select
-            class="campo"
-            [ngModel]="numFilasParticiones()"
-            (ngModelChange)="numFilasParticiones.set(+$event)"
-          >
-            <option [value]="10">10</option>
-            <option [value]="20">20</option>
-          </select>
-        </label>
-      </div>
-      <div class="max-w-4xl">
-        <app-grafico-particiones [resultado]="resultado()" [numFilas]="numFilasParticiones()" />
-      </div>
     }
 
     @case ('tiempo') {
       <div class="max-w-3xl">
         <h3 class="text-base font-semibold text-slate-900">Score global a lo largo del tiempo</h3>
         <p class="ayuda">
-          Los puntos marcan los registros graves (rojo) y las demás anomalías globales (ámbar).
+          Los puntos marcan las anomalías globales.
           @if (marcasTiempo().length === 0) {
             Ahora mismo no hay ninguno.
           }
@@ -195,8 +174,9 @@
           <div class="flex-1">
             <h3 class="text-base font-semibold text-slate-900">Tabla CIF completa</h3>
             <p class="ayuda">
-              Todos los registros con su score, clase, II, RI y el valor en cada partición, con y
-              sin umbral. En CSV.
+              Todos los registros con su score, si son anomalía global y anomalía CIF, II, RI y
+              el valor en cada partición. En
+              CSV.
             </p>
           </div>
           <button type="button" class="btn-secundario" (click)="descargar.emit('tabla')">

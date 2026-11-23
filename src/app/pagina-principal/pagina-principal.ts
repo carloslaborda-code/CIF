@@ -15,7 +15,6 @@ import {
   validarParametrosIF,
 } from '../core/logica/aplicar-isolation-forest';
 import { cifACsv, ejecutarCif, ResultadoCif, resumenParticionesACsv } from '../core/logica/cif';
-import { CORTES_POR_DEFECTO, CortesClasificacion } from '../core/logica/clasificar';
 import {
   ConfiguracionCif,
   ConfiguracionZscore,
@@ -24,6 +23,7 @@ import {
   VERSION_CONFIGURACION,
 } from '../core/logica/configuracion';
 import { Contexto, validarContextos } from '../core/logica/contextos';
+import { cortesPorDefecto, CortesCif } from '../core/logica/cortes';
 import { Operacion, Preparacion, procesadoDelArticulo } from '../core/logica/preparar';
 import {
   aplicarFiltro,
@@ -208,10 +208,10 @@ export class PaginaPrincipal {
   protected readonly resultadoCif = signal<ResultadoCif | null>(null);
   // El error del CIF va aparte para que salga debajo de su propio formulario.
   protected readonly errorCif = signal<string | null>(null);
-  /** Cortes de RI e II para clasificar en grave, límite o normal. */
-  protected readonly cortes = signal<CortesClasificacion>({ ...CORTES_POR_DEFECTO });
   /** Aviso al cargar una configuración (bien o mal). */
   protected readonly mensajeConfiguracion = signal<{ texto: string; error: boolean } | null>(null);
+  /** Cortes de RI e II del mapa: por encima de los dos, anomalía CIF (van al JSON). */
+  protected readonly cortes = signal<CortesCif>(cortesPorDefecto(PARAMETROS_IF_POR_DEFECTO.umbral));
   /** Frase que se le dice al lector de pantalla cuando pasa algo (no se ve). */
   protected readonly anuncio = signal('');
 
@@ -876,8 +876,8 @@ export class PaginaPrincipal {
 
   /**
    * Carga un JSON de configuración y rellena con él todo el formulario:
-   * tipo de CSV, columnas, filtro, preparación, parámetros, semilla (fija), contextos
-   * y cortes de la clasificación.
+   * tipo de CSV, columnas, filtro, preparación, parámetros, semilla (fija), contextos y
+   * cortes de RI e II.
    */
   protected async cargarConfiguracion(evento: Event): Promise<void> {
     const input = evento.target as HTMLInputElement;

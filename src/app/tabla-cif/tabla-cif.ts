@@ -2,14 +2,17 @@ import { Component, computed, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ResultadoCif } from '../core/logica/cif';
-import { clasificar, Clase, CortesClasificacion, NOMBRE_CLASE } from '../core/logica/clasificar';
+import { CortesCif, esAnomaliaCif } from '../core/logica/cortes';
 import { extremos } from '../graficos/escala';
 
 /** Por qué columna se ordenan las filas de la tabla. */
 type Orden = 'score' | 'ii' | 'ri';
 
-/** Qué clases se enseñan. */
-type FiltroClase = 'todas' | Clase;
+/**
+ * Qué registros se enseñan: todos, los que son anomalía en alguna partición
+ * (RI > 0), las anomalías CIF o las anomalías globales.
+ */
+type Filtro = 'todos' | 'particion' | 'cif' | 'global';
 
 /** Mínimo y máximo de los valores que se pintan, para la escala de color. */
 interface Escala {
@@ -20,8 +23,8 @@ interface Escala {
 /**
  * Tabla del CIF con el formato de la Tabla 5 del artículo: anomalía, ID, score
  * del IF, II, RI y una columna por partición agrupadas por contexto, coloreadas
- * de verde (más bajo) a rojo (más alto). Además lleva la clase de cada registro
- * (grave, límite o normal) y se puede filtrar por ella.
+ * de verde (más bajo) a rojo (más alto). Además dice si cada registro es anomalía
+ * CIF (RI e II por encima de los cortes) y se puede filtrar.
  */
 @Component({
   selector: 'app-tabla-cif',
@@ -32,38 +35,40 @@ interface Escala {
 })
 export class TablaCif {
   readonly resultado = input.required<ResultadoCif>();
-  readonly cortes = input.required<CortesClasificacion>();
+  readonly cortes = input.required<CortesCif>();
 
   protected readonly opcionesNumFilas = [10, 20, 50, 100];
   protected readonly numFilas = signal(10);
   protected readonly orden = signal<Orden>('score');
-  protected readonly filtroClase = signal<FiltroClase>('todas');
-  protected readonly nombreClase = NOMBRE_CLASE;
-  /** Símbolo de cada clase: así no se distinguen solo por el color. */
-  protected readonly simboloClase: Record<Clase, string> = {
-    grave: '▲',
-    limite: '◆',
-    normal: '●',
-  };
+  protected readonly filtro = signal<Filtro>('todos');
 
   /** Cuántas particiones tiene cada contexto (para el colspan de la cabecera). */
   protected readonly grupos = computed(() =>
     this.resultado().contextos.map((c) => ({ nombre: c.nombre, columnas: c.particiones.length })),
   );
 
-  /** Todas las filas con su clase calculada. */
-  private readonly clasificadas = computed(() => {
+  /** Todas las filas, con si son anomalía CIF. */
+  private readonly conCif = computed(() => {
     const cortes = this.cortes();
-    return this.resultado().filas.map((f) => ({ ...f, clase: clasificar(f, cortes) }));
+    return this.resultado().filas.map((f) => ({ ...f, cif: esAnomaliaCif(f, cortes) }));
   });
 
-  /** Las filas de la clase elegida, ordenadas por la columna elegida (a igualdad, por score global). */
+  /** Las filas del filtro, ordenadas por la columna elegida (a igualdad, por score global). */
   private readonly filtradas = computed(() => {
     const clave = this.orden();
-    const clase = this.filtroClase();
-    return this.clasificadas()
-      .filter((f) => clase === 'todas' || f.clase === clase)
-      .sort((a, b) => b[clave] - a[clave] || b.score - a.score);
+    const filtro = this.filtro();
+    return (
+      this.conCif()
+        .filter(
+          (f) =>
+            filtro === 'todos' ||
+            (filtro === 'particion' && f.ri > 0) ||
+            (filtro === 'cif' && f.cif) ||
+            (filtro === 'global' && f.anomalia),
+        )
+        // Sin II (en blanco) va al final al ordenar por II.
+        .sort((a, b) => (b[clave] ?? -1) - (a[clave] ?? -1) || b.score - a.score)
+    );
   });
 
   protected readonly totalFiltradas = computed(() => this.filtradas().length);
@@ -78,7 +83,7 @@ export class TablaCif {
     extremos(
       this.filasVisibles()
         .flatMap((f) => f.valores)
-        .filter((v) => v > 0),
+        .filter((v): v is number => v !== null),
     ),
   );
 

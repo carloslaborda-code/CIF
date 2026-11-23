@@ -1,16 +1,21 @@
 <ul class="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
-  @for (clase of ['grave', 'limite', 'normal']; track clase) {
-    <li class="flex items-center gap-2">
-      <span
-        class="h-3 w-3 rounded-full"
-        [style.background-color]="$any(color)[clase]"
-        aria-hidden="true"
-      ></span>
-      {{ $any(nombreClase)[clase] }}
-    </li>
-  }
-  <li class="text-slate-600">Tamaño de la burbuja: score del IF global</li>
+  <li class="flex items-center gap-2">
+    <span class="h-3 w-3 rounded-full bg-[var(--anomalia)]" aria-hidden="true"></span>
+    Anomalía CIF ({{ numCif() }})
+  </li>
+  <li class="flex items-center gap-2">
+    <span class="h-3 w-3 rounded-full bg-[var(--no-anomalia)]" aria-hidden="true"></span>
+    No es anomalía CIF ({{ numDibujados() - numCif() }})
+  </li>
+  <li class="text-slate-600">Tamaño del círculo: score del IF global</li>
 </ul>
+@if (sinIi() > 0) {
+  <p class="ayuda mb-2">
+    {{ sinIi() }} {{ sinIi() === 1 ? 'registro no sale' : 'registros no salen' }}: no
+    {{ sinIi() === 1 ? 'es' : 'son' }} anomalía en ninguna partición, y por eso no
+    {{ sinIi() === 1 ? 'tiene' : 'tienen' }} II.
+  </p>
+}
 
 <div class="relative mx-auto max-w-3xl">
   <svg
@@ -18,80 +23,100 @@
     [attr.viewBox]="'0 0 ' + ANCHO + ' ' + ALTO"
     role="img"
     tabindex="0"
-    aria-label="Mapa de los registros según su intensidad (II, eje horizontal) y su recurrencia (RI, eje vertical). El tamaño de cada burbuja es el score del Isolation Forest global. Usa las flechas izquierda y derecha para recorrer las burbujas."
+    aria-label="Mapa de los registros que son anomalía en alguna partición según su intensidad (II, eje horizontal) y su recurrencia (RI, eje vertical). El tamaño de cada círculo es el score del Isolation Forest global. Los que están por encima de los dos cortes son anomalías CIF. Usa las flechas izquierda y derecha para recorrer los círculos."
     (keydown)="alPulsar($event)"
     (pointerleave)="activa.set(null)"
     (blur)="activa.set(null)"
   >
-    <!-- Zona "grave": RI e II por encima de los cortes -->
+    <!-- Fondo como el de la Fig. 9: de verde (abajo a la izquierda) a rojo (arriba a la derecha) -->
+    <defs>
+      <linearGradient id="fondo-mapa" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0" stop-color="#dfe8cf" />
+        <stop offset="1" stop-color="#fde4e2" />
+      </linearGradient>
+    </defs>
+    <rect
+      [attr.x]="px(0)"
+      [attr.y]="py(1)"
+      [attr.width]="px(1) - px(0)"
+      [attr.height]="py(0) - py(1)"
+      fill="url(#fondo-mapa)"
+    />
+    <!-- Zona de las anomalías CIF: por encima de los dos cortes -->
     <rect
       [attr.x]="px(cortes().ii)"
       [attr.y]="py(1)"
       [attr.width]="px(1) - px(cortes().ii)"
       [attr.height]="py(cortes().ri) - py(1)"
-      fill="#fef2f2"
+      fill="#fca5a5"
+      fill-opacity="0.25"
     />
-    <text
-      class="grafico-etiqueta"
-      [attr.x]="px(1) - 6"
-      [attr.y]="py(cortes().ri) - 8"
-      text-anchor="end"
-    >
-      Zona grave: RI &gt; {{ cortes().ri }} e II &gt; {{ cortes().ii }}
-    </text>
 
-    <!-- Rejilla y ejes -->
-    @for (m of marcas; track m) {
+    <!-- Rejilla y marcas de los ejes -->
+    @for (m of marcasY; track m) {
       <line
-        [attr.x1]="px(0)"
+        [attr.x1]="px(-0.1)"
         [attr.x2]="px(1)"
         [attr.y1]="py(m)"
         [attr.y2]="py(m)"
         stroke="var(--grafico-rejilla)"
       />
+      <text class="grafico-texto" [attr.x]="px(-0.1) - 6" [attr.y]="py(m) + 4" text-anchor="end">
+        {{ m.toFixed(1) }}
+      </text>
+    }
+    @for (m of marcasX; track m) {
       <line
         [attr.x1]="px(m)"
         [attr.x2]="px(m)"
-        [attr.y1]="py(0)"
+        [attr.y1]="py(-0.1)"
         [attr.y2]="py(1)"
         stroke="var(--grafico-rejilla)"
       />
-      <text
-        class="grafico-texto"
-        [attr.x]="px(-HOLGURA) - 6"
-        [attr.y]="py(m) + 4"
-        text-anchor="end"
-      >
-        {{ m.toFixed(2) }}
-      </text>
-      <text
-        class="grafico-texto"
-        [attr.x]="px(m)"
-        [attr.y]="py(-HOLGURA) + 16"
-        text-anchor="middle"
-      >
-        {{ m.toFixed(2) }}
+      <text class="grafico-texto" [attr.x]="px(m)" [attr.y]="py(-0.1) + 16" text-anchor="middle">
+        {{ m.toFixed(1) }}
       </text>
     }
+    <!-- Ejes en II = 0 y RI = 0 -->
+    <line
+      [attr.x1]="px(0)"
+      [attr.x2]="px(0)"
+      [attr.y1]="py(-0.1)"
+      [attr.y2]="py(1)"
+      stroke="var(--grafico-eje)"
+    />
+    <line
+      [attr.x1]="px(-0.1)"
+      [attr.x2]="px(1)"
+      [attr.y1]="py(0)"
+      [attr.y2]="py(0)"
+      stroke="var(--grafico-eje)"
+    />
+    <!-- Nombres de los ejes -->
     <text
       class="grafico-texto"
-      [attr.x]="(px(0) + px(1)) / 2"
+      [attr.x]="(px(-0.1) + px(1)) / 2"
       [attr.y]="ALTO - 8"
       text-anchor="middle"
     >
-      II · intensidad (mediana de los scores en las particiones)
+      Indicador de intensidad (II)
     </text>
     <text
       class="grafico-texto"
-      [attr.transform]="'translate(14 ' + (py(0) + py(1)) / 2 + ') rotate(-90)'"
+      [attr.transform]="'translate(14 ' + (py(-0.1) + py(1)) / 2 + ') rotate(-90)'"
       text-anchor="middle"
     >
-      RI · recurrencia (parte de las particiones afectadas)
+      Indicador de recurrencia (RI)
     </text>
+    <!-- Las dos zonas, como en la figura -->
+    <text class="grafico-etiqueta" [attr.x]="px(1) - 6" [attr.y]="py(1) + 16" text-anchor="end">
+      Anómalo
+    </text>
+    <text class="grafico-etiqueta" [attr.x]="px(0.06)" [attr.y]="py(0.05)">No anómalo</text>
 
-    <!-- Cortes de la clasificación -->
+    <!-- Cortes de RI e II -->
     <line
-      [attr.x1]="px(0)"
+      [attr.x1]="px(-0.1)"
       [attr.x2]="px(1)"
       [attr.y1]="py(cortes().ri)"
       [attr.y2]="py(cortes().ri)"
@@ -102,39 +127,36 @@
     <line
       [attr.x1]="px(cortes().ii)"
       [attr.x2]="px(cortes().ii)"
-      [attr.y1]="py(0)"
+      [attr.y1]="py(-0.1)"
       [attr.y2]="py(1)"
       stroke="#334155"
       stroke-width="1.5"
       stroke-dasharray="6 4"
     />
+    <text class="grafico-etiqueta" [attr.x]="px(-0.1) + 4" [attr.y]="py(cortes().ri) - 6">
+      RI = {{ cortes().ri }}
+    </text>
+    <text
+      class="grafico-etiqueta"
+      [attr.x]="px(cortes().ii) - 4"
+      [attr.y]="py(1) + 32"
+      text-anchor="end"
+    >
+      II = {{ cortes().ii }}
+    </text>
 
-    <!-- Burbujas, con borde blanco para que se distingan cuando se pisan -->
-    @for (b of burbujas(); track $index) {
+    <!-- Un círculo por registro, semitransparente como en la figura -->
+    @for (b of burbujas(); track b.fila.id) {
       <circle
         [attr.cx]="b.x"
         [attr.cy]="b.y"
         [attr.r]="b.radio"
-        [attr.fill]="color[b.clase]"
-        fill-opacity="0.85"
-        [attr.stroke]="activa() === $index ? '#0f172a' : 'white'"
+        [attr.fill]="b.cif ? 'var(--anomalia)' : 'var(--no-anomalia)'"
+        fill-opacity="0.55"
+        [attr.stroke]="activa() === $index ? '#0f172a' : 'none'"
         stroke-width="2"
         (pointerenter)="activa.set($index)"
       />
-    }
-    <!-- Cuántos registros hay en el punto, si hay más de uno y no pisa otra etiqueta.
-         Van en un bucle aparte, después de todas las burbujas, para que ninguna las tape -->
-    @for (b of burbujas(); track $index) {
-      @if (conEtiqueta().has($index)) {
-        <text
-          class="grafico-etiqueta"
-          [attr.x]="b.x + b.radio + 4"
-          [attr.y]="b.y - b.radio + 4"
-          pointer-events="none"
-        >
-          ×{{ b.registros }}
-        </text>
-      }
     }
   </svg>
 
@@ -147,26 +169,20 @@
       [style.right.%]="d.x > ANCHO * 0.55 ? 100 - (d.x / ANCHO) * 100 + 3 : null"
     >
       <p class="font-medium text-slate-900">
-        {{ nombreClase[d.clase] }} · {{ d.registros }}
-        {{ d.registros === 1 ? 'registro' : 'registros' }}
+        Registro {{ d.fila.registro }}
+        @if (d.fila.timestamp !== '' + d.fila.registro) {
+          · {{ d.fila.timestamp }}
+        }
       </p>
       <p class="whitespace-nowrap text-slate-700">
-        RI <strong class="tabular-nums">{{ d.ri.toFixed(2) }}</strong> · II
-        <strong class="tabular-nums">{{ d.ii.toFixed(2) }}</strong>
+        {{ d.cif ? 'Anomalía CIF' : 'No es anomalía CIF' }} ·
+        {{ d.fila.anomalia ? 'anomalía global' : 'no es anomalía global' }}
       </p>
-      @for (f of d.ejemplos; track f.id) {
-        <p class="whitespace-nowrap text-slate-700">
-          Registro {{ f.registro }}
-          @if (f.timestamp !== '' + f.registro) {
-            · {{ f.timestamp }}
-          }
-          · score
-          <strong class="tabular-nums">{{ f.score.toFixed(3) }}</strong>
-        </p>
-      }
-      @if (d.registros > d.ejemplos.length) {
-        <p class="text-slate-600">y {{ d.registros - d.ejemplos.length }} más</p>
-      }
+      <p class="whitespace-nowrap text-slate-700">
+        RI <strong class="tabular-nums">{{ d.fila.ri.toFixed(2) }}</strong> · II
+        <strong class="tabular-nums">{{ d.fila.ii.toFixed(2) }}</strong> · score
+        <strong class="tabular-nums">{{ d.fila.score.toFixed(3) }}</strong>
+      </p>
     </div>
   }
 </div>
@@ -176,25 +192,27 @@
   <div class="mt-2 max-h-64 overflow-auto rounded-lg border border-slate-200">
     <table class="tabla">
       <caption class="sr-only">
-        Registros agrupados por RI e II
+        Registros del mapa con su RI, su II y su score
       </caption>
       <thead class="sticky top-0 bg-slate-100">
         <tr>
-          <th scope="col">Clase</th>
+          <th scope="col" class="!text-right">Registro</th>
+          <th scope="col">Anomalía CIF</th>
+          <th scope="col">Anomalía global</th>
           <th scope="col" class="!text-right">RI</th>
           <th scope="col" class="!text-right">II</th>
-          <th scope="col" class="!text-right">Registros</th>
-          <th scope="col" class="!text-right">Score máximo</th>
+          <th scope="col" class="!text-right">Score</th>
         </tr>
       </thead>
       <tbody>
-        @for (b of filasTabla(); track $index) {
+        @for (b of filasTabla(); track b.fila.id) {
           <tr>
-            <td>{{ nombreClase[b.clase] }}</td>
-            <td class="text-right tabular-nums">{{ b.ri.toFixed(2) }}</td>
-            <td class="text-right tabular-nums">{{ b.ii.toFixed(2) }}</td>
-            <td class="text-right tabular-nums">{{ b.registros }}</td>
-            <td class="text-right tabular-nums">{{ b.scoreMaximo.toFixed(3) }}</td>
+            <td class="text-right tabular-nums">{{ b.fila.registro }}</td>
+            <td>{{ b.cif ? 'Sí' : 'No' }}</td>
+            <td>{{ b.fila.anomalia ? 'Sí' : 'No' }}</td>
+            <td class="text-right tabular-nums">{{ b.fila.ri.toFixed(2) }}</td>
+            <td class="text-right tabular-nums">{{ b.fila.ii.toFixed(2) }}</td>
+            <td class="text-right tabular-nums">{{ b.fila.score.toFixed(3) }}</td>
           </tr>
         }
       </tbody>

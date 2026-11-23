@@ -53,7 +53,9 @@
               </th>
               <th scope="col" class="!text-right">Peso</th>
               <th scope="col" class="!text-right">Anomalías</th>
-              <th scope="col" class="!text-right">Score medio</th>
+              <th scope="col" class="!text-right">
+                <abbr title="Media de los scores de las anomalías de la partición">Score medio de las anomalías</abbr>
+              </th>
               <th scope="col" class="!text-right">Score máximo</th>
               <th scope="col" class="!text-right">Semilla</th>
             </tr>
@@ -74,7 +76,7 @@
                   {{ p.numAnomalias }}
                   <span class="text-slate-600">({{ porcentaje(p.numAnomalias) }} %)</span>
                 </td>
-                <td class="text-right tabular-nums">{{ p.scoreMedio.toFixed(3) }}</td>
+                <td class="text-right tabular-nums">{{ p.scoreMedio !== null ? p.scoreMedio.toFixed(3) : '' }}</td>
                 <td class="text-right tabular-nums">{{ p.scoreMaximo.toFixed(3) }}</td>
                 <td class="text-right tabular-nums text-slate-600">{{ p.semilla }}</td>
               </tr>

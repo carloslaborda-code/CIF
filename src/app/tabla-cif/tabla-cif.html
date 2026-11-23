@@ -1,12 +1,12 @@
-<!-- Controles: qué clase, cuántas filas y por qué columna ordenar -->
+<!-- Controles: qué registros, cuántas filas y por qué columna ordenar -->
 <div class="flex flex-wrap items-end gap-4">
   <label class="etiqueta">
-    Clase
-    <select class="campo" [ngModel]="filtroClase()" (ngModelChange)="filtroClase.set($event)">
-      <option value="todas">Todas</option>
-      <option value="grave">Solo graves</option>
-      <option value="limite">Solo límite</option>
-      <option value="normal">Solo normales</option>
+    Registros
+    <select class="campo" [ngModel]="filtro()" (ngModelChange)="filtro.set($event)">
+      <option value="todos">Todos</option>
+      <option value="particion">Anomalía en alguna partición</option>
+      <option value="cif">Solo anomalías CIF</option>
+      <option value="global">Solo anomalías globales</option>
     </select>
   </label>
   <label class="etiqueta">
@@ -25,14 +25,14 @@
       }
     </select>
   </label>
-  <!-- aria-live: al cambiar el filtro, el lector de pantalla dice cuántas quedan -->
+  <!-- aria-live: al cambiar las filas, el lector de pantalla dice cuántas se ven -->
   <p class="pb-2 text-sm text-slate-600" aria-live="polite">
     Se ven {{ filasVisibles().length }} de {{ totalFiltradas() }} registros, de mayor a menor.
   </p>
 </div>
 
 @if (filasVisibles().length === 0) {
-  <p class="aviso-info">No hay ningún registro de esa clase.</p>
+  <p class="aviso-info">No hay ningún registro así.</p>
 } @else {
   <!-- Tabla como la Tabla 5 del artículo. tabindex="0": la caja con scroll se puede recorrer con el teclado -->
   <div
@@ -43,13 +43,16 @@
   >
     <table class="min-w-full text-sm">
       <caption class="sr-only">
-        Registros con su score global, sus indicadores II y RI, su clase y su valor en cada
-        partición
+        Registros con su score global, sus indicadores II y RI y su valor en cada partición
       </caption>
       <thead class="bg-slate-100 text-slate-800">
         <!-- Primera fila de cabecera: los grupos -->
         <tr>
-          <th colspan="7" scope="colgroup" class="border-r border-slate-300 px-3 py-2 text-left">
+          <th
+            [attr.colspan]="resultado().sinFecha ? 6 : 7"
+            scope="colgroup"
+            class="border-r border-slate-300 px-3 py-2 text-left"
+          >
             Registro
           </th>
           @for (g of grupos(); track $index) {
@@ -64,9 +67,11 @@
         </tr>
         <!-- Segunda fila: las columnas -->
         <tr class="border-t border-slate-300">
-          <th scope="col" class="px-3 py-2 text-left">Clase</th>
           <th scope="col" class="px-3 py-2 text-left">
-            <abbr title="Anomalía en el Isolation Forest global">Anomalía</abbr>
+            <abbr title="Anomalía en el Isolation Forest global">Anomalía global</abbr>
+          </th>
+          <th scope="col" class="px-3 py-2 text-left">
+            <abbr title="RI e II por encima de los cortes">Anomalía CIF</abbr>
           </th>
           <th scope="col" class="px-3 py-2 text-right">Registro</th>
           <!-- Sin fecha, el momento es el propio número de registro -->
@@ -96,14 +101,11 @@
       <tbody class="tabular-nums text-slate-900">
         @for (f of filasVisibles(); track f.id) {
           <tr class="border-t border-slate-200">
-            <td class="px-3 py-1.5">
-              <span [class]="'clase-' + f.clase">
-                <span aria-hidden="true">{{ simboloClase[f.clase] }}</span>
-                {{ nombreClase[f.clase] }}
-              </span>
-            </td>
             <td class="px-3 py-1.5" [class.font-semibold]="f.anomalia">
               {{ f.anomalia ? 'Sí' : 'No' }}
+            </td>
+            <td class="px-3 py-1.5" [class.font-semibold]="f.cif">
+              {{ f.cif ? 'Sí' : 'No' }}
             </td>
             <td class="px-3 py-1.5 text-right">{{ f.registro }}</td>
             @if (!resultado().sinFecha) {
@@ -115,25 +117,19 @@
             >
               {{ f.score.toFixed(3) }}
             </td>
-            <td class="px-3 py-1.5 text-right">{{ f.ii > 0 ? f.ii.toFixed(2) : '0' }}</td>
+            <td class="px-3 py-1.5 text-right">{{ f.ii !== null ? f.ii.toFixed(2) : '' }}</td>
             <td class="border-r border-slate-300 px-3 py-1.5 text-right">{{ f.ri.toFixed(2) }}</td>
-            <!-- Las particiones donde no es anomalía valen 0 y van en gris -->
+            <!-- Las particiones donde no es anomalía van en blanco -->
             @for (v of f.valores; track $index) {
-              @if (v > 0) {
+              @if (v !== null) {
                 <td
                   class="px-3 py-1.5 text-right"
                   [style.background-color]="color(v, escalaParticiones())"
-                  [title]="'Score: ' + f.brutos[$index].toFixed(4)"
                 >
                   {{ v.toFixed(2) }}
                 </td>
               } @else {
-                <td
-                  class="bg-slate-50 px-3 py-1.5 text-right text-slate-600"
-                  [title]="'Score sin umbral: ' + f.brutos[$index].toFixed(4)"
-                >
-                  0
-                </td>
+                <td class="px-3 py-1.5"></td>
               }
             }
           </tr>
@@ -151,8 +147,8 @@
       anomalía global si supera el umbral ({{ resultado().umbral }}).
     </li>
     <li>
-      <strong>Particiones:</strong> cada una muestra su score si supera el umbral y 0 si no. Deja el
-      ratón encima de una celda para ver el score sin umbral.
+      <strong>Particiones:</strong> cada una muestra su score si supera el umbral; si no, va en
+      blanco.
     </li>
     <li>
       <strong>RI (recurrencia):</strong> particiones donde es anomalía ÷
@@ -160,12 +156,13 @@
       general.
     </li>
     <li>
-      <strong>II (intensidad):</strong> mediana de los valores de todas las particiones, contando
-      los 0.
+      <strong>II (intensidad):</strong> media de los scores de las particiones donde es anomalía.
+      Si no es anomalía en ninguna partición, va en blanco.
     </li>
     <li>
-      <strong>Clase:</strong> grave si RI &gt; {{ cortes().ri }} e II &gt; {{ cortes().ii }}; límite
-      si no es grave pero sale en alguna partición o es anomalía global; normal en el resto.
+      <strong>Anomalía CIF:</strong> RI mayor que {{ cortes().ri }} e II mayor que
+      {{ cortes().ii }}. Los cortes se cambian en la pestaña «Mapa RI–II». No tiene por qué
+      coincidir con la anomalía global.
     </li>
     <li>Los colores van de verde (lo más bajo de lo que se ve) a rojo (lo más alto).</li>
   </ul>

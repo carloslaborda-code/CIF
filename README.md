@@ -6,8 +6,9 @@ Para cada momento calcula:
 
 - **Score:** lo raro que es mirando todos los sensores a la vez (Isolation Forest global).
 - **RI (recurrencia):** en qué parte de los grupos de sensores aparece la anomalía, de 0 (en ninguno) a 1 (en todos).
-- **II (intensidad):** lo fuerte que es en esos grupos.
-- **Clase:** grave, límite o normal, a partir de RI e II.
+- **II (intensidad):** lo fuerte que es en esos grupos: la media de los scores de las particiones donde es anomalía. Nunca vale 0; si no es anomalía en ninguna partición, va en blanco.
+
+RI e II se calculan para todos los registros: uno que no es anomalía global puede serlo en alguna partición.
 
 El Isolation Forest es la librería de Emilia Rouanet Feliu, copiada **sin cambios** de su proyecto *Isolation Forest Visualizer*. La semilla se consigue sustituyendo `Math.random` solo mientras se ejecuta su código (`core/logica/semilla.ts`).
 
@@ -30,10 +31,9 @@ Abre http://localhost:4200. La aplicación es un asistente de cinco pasos; la ba
 2. **Preparar.** Rango de registros, procesado de características (ver «Preparación de datos»), z-score opcional (ver «Normalización z-score») y revisión de la tabla resultante. Si quieres, filtra las lecturas por tipo de medida (`name`), aulario (`alias`) o sensor (`uid`). Nada de esto vuelve a leer el CSV.
 3. **Contextos.** Un contexto es una forma de mirar la instalación (por tipo, por edificio…) y sus particiones son los grupos de sensores que salen al mirarla así. Se pueden crear a mano o con «Contexto automático por tipo de medida». Sin contextos solo se calcula el IF global, sin RI ni II.
 4. **Ajustes.** Parámetros del Isolation Forest y semilla.
-5. **Resultados.** Resumen arriba (registros, anomalías, graves y límite) y seis pestañas. Cada fila se identifica por su número de registro:
+5. **Resultados.** Resumen arriba (registros y anomalías globales) y cinco pestañas. Cada fila se identifica por su número de registro:
    - **Tabla:** la tabla CIF, como la Tabla 5 del artículo.
-   - **Mapa RI–II:** gráfico de burbujas (Fig. 9). Aquí se cambian los cortes de la clasificación.
-   - **Global y particiones:** score global frente al de cada partición (Fig. 8).
+   - **Mapa RI–II:** un círculo por cada registro que es anomalía en alguna partición, según su II (horizontal) y su RI (vertical); el tamaño es el score global. Se fijan un corte de RI y otro de II: los que quedan por encima de los dos son **anomalías CIF** (rojos) y el resto no (verdes). No tienen por qué coincidir con las anomalías globales.
    - **En el tiempo:** score global por número de registro.
    - **Contextos:** comparación de contextos y particiones.
    - **Descargas:** tabla, resumen por partición y configuración.
@@ -107,12 +107,14 @@ Todos los valores por defecto son los del artículo.
 | Semilla | al azar | Marcando «Usar siempre esta semilla», cada ejecución da el mismo resultado. La partición *k* usa semilla + *k* |
 | Quitar columnas constantes | sí | Un sensor que vale siempre lo mismo acerca todos los scores a 0,5 en el IF de Emilia, y las anomalías no llegan al umbral |
 
-**Clasificación (paso 5, pestaña «Mapa RI–II»)**
+**Anomalía CIF (paso 5, pestaña «Mapa RI–II»)**
 
 | Parámetro | Por defecto | Significado |
 |---|---|---|
-| Corte de RI | `0.25` | Grave si RI es mayor que este valor… |
-| Corte de II | `0` | …e II es mayor que este. Si no es grave pero sale en alguna partición o en el IF global, es límite |
+| Corte de RI | `0.25` | Es anomalía CIF si RI es mayor que este valor… (el del artículo) |
+| Corte de II | el umbral del IF (`0.70`) | …e II es mayor que este. II es la media de scores que superan el umbral, así que siempre es mayor que él: un corte más bajo no separaría nada |
+
+Los cortes cambian el mapa, la columna «Anomalía CIF» de la tabla y el CSV, y se guardan en el JSON de configuración.
 
 ## Preparación de datos
 
@@ -159,9 +161,9 @@ Lo que el artículo no concreta y se ha decidido aquí:
 | `columnas.csv` | Paso 2 | Qué sensor y qué aulario hay detrás de cada columna |
 | `parametros_zscore.csv` | Paso 2 (con z-score) | Media y desviación de cada columna (`columna;media;desviacion`). Se puede volver a cargar para normalizar otros datos igual |
 | `dataset_normalizado.csv` | Paso 2 (con z-score) | La tabla que recibe el IF, normalizada, con todas las cifras y punto decimal |
-| `4_cif_semilla-N.csv` | Paso 5 | Tabla CIF: `registro`, `timestamp` (solo si hay fecha), `anomalia`, `clase`, `score`, `ii`, `ri` y el valor de cada partición |
-| `4_cif_particiones_semilla-N.csv` | Paso 5 | Resumen por partición |
-| `configuracion_semilla-N.json` | Arriba o paso 5 | Columnas, si el CSV tiene fecha, filtro, rango, procesado de características, z-score con sus parámetros, parámetros del IF, semilla, contextos y cortes. Los JSON antiguos siguen funcionando: si no traen procesado, no se procesa nada, para repetir el resultado de entonces; si traen relleno, se ignora |
+| `4_cif_semilla-N.csv` | Paso 5 | Tabla CIF: `registro`, `timestamp` (solo si hay fecha), `anomalia` (global), `anomalia_cif`, `score`, `ii`, `ri` y el valor de cada partición. II y las particiones donde no es anomalía van en blanco |
+| `4_cif_particiones_semilla-N.csv` | Paso 5 | Resumen por partición. El score medio es el de sus anomalías (en blanco si no tiene ninguna) |
+| `configuracion_semilla-N.json` | Arriba o paso 5 | Columnas, si el CSV tiene fecha, filtro, rango, procesado de características, z-score con sus parámetros, parámetros del IF, semilla, contextos y cortes de RI e II. Los JSON antiguos siguen funcionando: si no traen procesado, no se procesa nada, para repetir el resultado de entonces; si traen relleno, se ignora |
 
 `dataset.csv`, `1_pivotado.csv`, `2_fusionado.csv` y `dataset_normalizado.csv` usan el formato del visualizador de Emilia: separador `;` y fecha `DD/MM/YYYY HH:MM:SS`, con la hora tal cual viene en el CSV de entrada. Sin columna de fecha, la primera columna es `registro`. Los CSV de datos no llevan metadatos para no romper ese formato; la semilla va en el nombre del fichero y en el JSON.
 
@@ -181,9 +183,9 @@ src/app/
 │       ├── filtrar.ts                   filtro por tipo, sensor y aulario; columnas.csv
 │       ├── contextos.ts                 contextos, particiones y su validación
 │       ├── semilla.ts                   generador con semilla y sustitución de Math.random
+│       ├── cortes.ts                    cortes de RI e II y anomalía CIF
 │       ├── aplicar-isolation-forest.ts  parámetros y llamada al IF de Emilia
 │       ├── cif.ts                       IF global, IF por partición, RI, II y exportación
-│       ├── clasificar.ts                grave / límite / normal
 │       └── configuracion.ts             JSON de configuración (guardar y cargar)
 ├── pagina-principal/                    el asistente de cinco pasos
 ├── ui/                                  barra de pasos y pestañas
@@ -195,12 +197,12 @@ src/app/
 ├── resultados/                          resumen y pestañas (paso 5)
 ├── tabla-cif/                           tabla CIF
 ├── comparacion-particiones/             comparación de contextos y particiones
-└── graficos/                            gráficos en SVG hechos a mano (líneas, burbujas, particiones)
+└── graficos/                            gráficos en SVG hechos a mano (líneas y burbujas)
 ```
 
 Los gráficos no usan librería a propósito:
 
-- **Fidelidad al artículo:** reproducen las Fig. 8 y 9 tal cual (paneles, métricas y zonas grave / límite), algo difícil de conseguir ajustando el estilo de una librería.
+- **Fidelidad al artículo:** reproducen la Fig. 9 tal cual, algo difícil de conseguir ajustando el estilo de una librería.
 - **Accesibilidad:** son SVG, que se pueden recorrer con teclado, y cada uno tiene su tabla alternativa. Las librerías habituales (Chart.js, ECharts) dibujan en un `<canvas>`, que un lector de pantalla no puede leer.
 - **Sin dependencias nuevas:** la aplicación pesa menos y no depende de que una librería siga siendo compatible con Angular.
 

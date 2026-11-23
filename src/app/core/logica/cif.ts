@@ -4,13 +4,18 @@
  *   1. IF sobre la tabla completa: score global de cada fila (AD = las que pasan el umbral).
  *   2. IF por separado sobre cada partición de cada contexto (solo sus columnas).
  *   3. Para cada fila, con los scores de las particiones:
- *        - valor en la partición = su score si pasa el umbral, si no 0 (como la Tabla 5)
+ *        - valor en la partición = su score si pasa el umbral; si no, en blanco (null).
+ *          Un score nunca vale 0 (ni 1): poner 0 donde no es anomalía confundía.
  *        - RI = particiones donde es anomalía / total de particiones          (Ec. 1)
- *        - II = mediana de los valores de todas las particiones, con los 0    (Ec. 2 y 3)
+ *        - II = media de los scores de las particiones donde es anomalía (se divide
+ *          entre esas particiones, no entre el total). Si no es anomalía en ninguna
+ *          partición, en blanco (null). Nunca vale 0.
+ *      RI e II se calculan para todos los registros, sean o no anomalía global: un
+ *      registro que no lo es puede serlo en alguna partición.
  *
- * Ejemplo de la Tabla 5 (fila 30051, 8 particiones):
- *   valores (0.82, 0, 0, 0.75, 0.77, 0.79, 0.77, 0) => RI = 5/8 = 0.63
- *   ordenados (0, 0, 0, 0.75, 0.77, 0.77, 0.79, 0.82) => II = (0.75 + 0.77) / 2 = 0.76
+ * Ejemplo del tutor (score global 0,65, umbral 0,70, 10 particiones):
+ *   anomalía en 3 particiones, con 0,72, 0,75 y 0,91
+ *   => RI = 3/10 = 0,30 · II = (0,72 + 0,75 + 0,91) / 3 = 0,79
  *
  * Todo sale de una única semilla: el IF global usa la semilla y la partición
  * k-ésima usa semilla + k (ver derivarSemilla).
@@ -23,8 +28,8 @@ import {
   puntuarConSemilla,
   tablaAPuntos,
 } from './aplicar-isolation-forest';
-import { clasificar, CORTES_POR_DEFECTO, CortesClasificacion } from './clasificar';
 import type { Contexto } from './contextos';
+import { CortesCif, esAnomaliaCif } from './cortes';
 import type { TablaPivotada } from './pivotar';
 import { derivarSemilla } from './semilla';
 
@@ -39,7 +44,8 @@ export interface ResultadoParticion {
   ignoradas: string[];
   semilla: number;
   numAnomalias: number;
-  scoreMedio: number;
+  /** Score medio de las anomalías de la partición (las que pasan el umbral). null si no hay. */
+  scoreMedio: number | null;
   scoreMaximo: number;
 }
 
@@ -59,10 +65,11 @@ export interface FilaCif {
   score: number;
   anomalia: boolean;
   ri: number;
-  ii: number;
-  /** Valor en cada partición (score si pasa el umbral, si no 0), en el orden de `particiones`. */
-  valores: number[];
-  /** Score de cada partición sin aplicar el umbral. */
+  /** null si no es anomalía en ninguna partición. */
+  ii: number | null;
+  /** Valor en cada partición (su score si pasa el umbral; si no, null), en el orden de `particiones`. */
+  valores: (number | null)[];
+  /** Score de cada partición sin aplicar el umbral (para calcular los valores). */
   brutos: number[];
 }
 
@@ -89,40 +96,32 @@ export interface ResultadoCif {
   celdasNoNumericas: number;
 }
 
-/** Mediana de una lista de números (la media de los dos centrales si son pares). */
-export function mediana(valores: number[]): number {
-  if (valores.length === 0) {
-    return 0;
-  }
-  const ordenados = [...valores].sort((a, b) => a - b);
-  const mitad = Math.floor(ordenados.length / 2);
-  return ordenados.length % 2 === 1
-    ? ordenados[mitad]
-    : (ordenados[mitad - 1] + ordenados[mitad]) / 2;
-}
-
 /** Una fila es anomalía si su score es mayor (estrictamente) que el umbral, como en el artículo. */
 export function esAnomalia(score: number, umbral: number): boolean {
   return score > umbral;
 }
 
-/** Valor de una fila en una partición: su score si es anomalía, si no 0 (Tabla 5). */
-export function valorEnParticion(score: number, umbral: number): number {
-  return esAnomalia(score, umbral) ? score : 0;
+/** Valor de una fila en una partición: su score si es anomalía; si no, null (en blanco). */
+export function valorEnParticion(score: number, umbral: number): number | null {
+  return esAnomalia(score, umbral) ? score : null;
 }
 
 /**
- * RI e II de una fila a partir de sus valores en todas las particiones
- * (ya con el umbral aplicado, es decir, 0 donde no es anomalía).
- *   RI = particiones con valor > 0 / total de particiones   (Ec. 1)
- *   II = mediana de todos los valores, contando los 0       (Ec. 2 y 3)
+ * RI e II de una fila a partir de sus valores en todas las particiones (ya con
+ * el umbral aplicado: null donde no es anomalía).
+ *   RI = particiones donde es anomalía / total de particiones   (Ec. 1)
+ *   II = media de los scores de las particiones donde es anomalía; null si no
+ *        hay ninguna.
  */
-export function indicadores(valores: number[]): { ri: number; ii: number } {
-  if (valores.length === 0) {
-    return { ri: 0, ii: 0 };
-  }
-  const afectadas = valores.filter((v) => v > 0).length;
-  return { ri: afectadas / valores.length, ii: mediana(valores) };
+export function indicadores(valores: (number | null)[]): { ri: number; ii: number | null } {
+  const enAnomalia = valores.filter((v): v is number => v !== null);
+  return {
+    ri: valores.length === 0 ? 0 : enAnomalia.length / valores.length,
+    ii:
+      enAnomalia.length > 0
+        ? enAnomalia.reduce((suma, v) => suma + v, 0) / enAnomalia.length
+        : null,
+  };
 }
 
 /** Posiciones de las columnas que valen lo mismo en todas las filas. */
@@ -207,12 +206,15 @@ export function ejecutarCif(
       const scoresDeEsta = puntuarConSemilla(quedarseCon(usadas), p, semillaParticion);
       scoresParticion.push(scoresDeEsta);
 
+      // El score medio, solo de las anomalías de la partición (no de todos los registros).
       let numAnomalias = 0;
-      let suma = 0;
+      let sumaAnomalias = 0;
       let maximo = -Infinity;
       for (const s of scoresDeEsta) {
-        if (esAnomalia(s, p.umbral)) numAnomalias++;
-        suma += s;
+        if (esAnomalia(s, p.umbral)) {
+          numAnomalias++;
+          sumaAnomalias += s;
+        }
         maximo = Math.max(maximo, s);
       }
       particiones.push({
@@ -223,7 +225,7 @@ export function ejecutarCif(
         ignoradas: indices.filter((i) => !usadas.includes(i)).map((i) => tabla.ids[i]),
         semilla: semillaParticion,
         numAnomalias,
-        scoreMedio: suma / scoresDeEsta.length,
+        scoreMedio: numAnomalias > 0 ? sumaAnomalias / numAnomalias : null,
         scoreMaximo: maximo,
       });
     }
@@ -233,12 +235,13 @@ export function ejecutarCif(
   const filas: FilaCif[] = tabla.filas.map((fila, i) => {
     const brutos = scoresParticion.map((s) => s[i]);
     const valores = brutos.map((s) => valorEnParticion(s, p.umbral));
+    const anomalia = esAnomalia(scores[i], p.umbral);
     return {
       id: i + 1,
       registro: (tabla.primerRegistro ?? 1) + i,
       timestamp: fila.timestamp,
       score: scores[i],
-      anomalia: esAnomalia(scores[i], p.umbral),
+      anomalia,
       ...indicadores(valores),
       valores,
       brutos,
@@ -269,35 +272,34 @@ export function nombreParticion(r: ResultadoParticion): string {
 
 /**
  * CSV de la tabla CIF con todas las filas (en el orden de la tabla):
- * registro, timestamp (solo si hay fecha: sin fecha sería el mismo número), anomalia,
- * clase (grave, limite o normal), score, ii, ri, el valor de cada partición (con
- * umbral, como en pantalla) y después el score sin umbral de cada una.
+ * registro, timestamp (solo si hay fecha: sin fecha sería el mismo número), anomalia
+ * (global), anomalia_cif (RI e II por encima de los cortes), score, ii, ri y el valor
+ * de cada partición (como en pantalla). II y las particiones donde no es anomalía
+ * van en blanco.
  * La semilla va en el nombre del fichero y en el JSON de configuración.
  */
-export function cifACsv(r: ResultadoCif, cortes: CortesClasificacion = CORTES_POR_DEFECTO): string {
+export function cifACsv(r: ResultadoCif, cortes: CortesCif): string {
   const nombres = r.particiones.map(nombreParticion);
   return Papa.unparse({
     fields: [
       'registro',
       ...(r.sinFecha ? [] : ['timestamp']),
       'anomalia',
-      'clase',
+      'anomalia_cif',
       'score',
       'ii',
       'ri',
       ...nombres,
-      ...nombres.map((n) => `bruto ${n}`),
     ],
     data: r.filas.map((f) => [
       f.registro,
       ...(r.sinFecha ? [] : [f.timestamp]),
       f.anomalia ? 1 : 0,
-      clasificar(f, cortes),
+      esAnomaliaCif(f, cortes) ? 1 : 0,
       f.score,
-      f.ii,
+      f.ii ?? '',
       f.ri,
-      ...f.valores,
-      ...f.brutos,
+      ...f.valores.map((v) => v ?? ''),
     ]),
   });
 }
@@ -325,7 +327,7 @@ export function resumenParticionesACsv(r: ResultadoCif): string {
       p.ignoradas.join(' '),
       p.semilla,
       p.numAnomalias,
-      p.scoreMedio,
+      p.scoreMedio ?? '',
       p.scoreMaximo,
     ]),
   });

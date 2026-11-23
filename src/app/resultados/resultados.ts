@@ -3,12 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { ComparacionParticiones } from '../comparacion-particiones/comparacion-particiones';
 import { ResultadoCif } from '../core/logica/cif';
-import {
-  clasificar,
-  contarClases,
-  CORTES_POR_DEFECTO,
-  CortesClasificacion,
-} from '../core/logica/clasificar';
+import { cortesPorDefecto, CortesCif, esAnomaliaCif } from '../core/logica/cortes';
 import { numero, porcentaje } from '../graficos/escala';
 import { GraficoBurbujas } from '../graficos/grafico-burbujas';
 import {
@@ -17,7 +12,6 @@ import {
   MarcaPunto,
   SerieLineas,
 } from '../graficos/grafico-lineas';
-import { GraficoParticiones } from '../graficos/grafico-particiones';
 import { TablaCif } from '../tabla-cif/tabla-cif';
 import { Pestana, Pestanas } from '../ui/pestanas';
 
@@ -30,9 +24,9 @@ const MAX_MARCAS = 300;
 /**
  * Paso 5: los resultados del CIF.
  *
- * Arriba, el resumen (cuántas anomalías y de qué clase). Debajo, pestañas con
- * la tabla, el mapa RI–II (Fig. 9), el score global frente a las particiones
- * (Fig. 8), la línea temporal, la comparación de contextos y las descargas.
+ * Arriba, el resumen (anomalías globales y anomalías CIF). Debajo, pestañas con
+ * la tabla, el mapa RI–II (Fig. 9), la línea temporal, la comparación de
+ * contextos y las descargas.
  */
 @Component({
   selector: 'app-resultados',
@@ -43,7 +37,6 @@ const MAX_MARCAS = 300;
     Pestanas,
     TablaCif,
     GraficoBurbujas,
-    GraficoParticiones,
     GraficoLineas,
     ComparacionParticiones,
   ],
@@ -51,8 +44,8 @@ const MAX_MARCAS = 300;
 })
 export class Resultados {
   readonly resultado = input.required<ResultadoCif>();
-  /** Cortes de la clasificación; los guarda el padre para el JSON y el CSV. */
-  readonly cortes = model.required<CortesClasificacion>();
+  /** Cortes de RI e II; los guarda el padre para el JSON y el CSV. */
+  readonly cortes = model.required<CortesCif>();
   /** Si la semilla de esta ejecución ya está fija en el formulario. */
   readonly semillaFijada = input(false);
   readonly descargar = output<Descarga>();
@@ -61,20 +54,20 @@ export class Resultados {
   protected readonly pestanas: Pestana[] = [
     { id: 'tabla', texto: 'Tabla' },
     { id: 'mapa', texto: 'Mapa RI–II' },
-    { id: 'particiones', texto: 'Global y particiones' },
     { id: 'tiempo', texto: 'En el tiempo' },
     { id: 'comparacion', texto: 'Contextos' },
     { id: 'descargas', texto: 'Descargas' },
   ];
   protected readonly pestana = signal('tabla');
-  /** Registros que enseña el gráfico de global frente a particiones. */
-  protected readonly numFilasParticiones = signal(10);
 
   protected readonly numero = numero;
   protected readonly porcentaje = porcentaje;
   protected readonly formato3 = (y: number) => numero(y, 3);
 
-  protected readonly clases = computed(() => contarClases(this.resultado().filas, this.cortes()));
+  /** Cuántos registros son anomalía CIF (RI e II por encima de los cortes). */
+  protected readonly numAnomaliasCif = computed(
+    () => this.resultado().filas.filter((f) => esAnomaliaCif(f, this.cortes())).length,
+  );
 
   /** Los cortes se editan con ngModel; si se borra el campo o se sale de 0–1, no se cambia. */
   protected get corteRi(): number {
@@ -93,12 +86,20 @@ export class Resultados {
       this.cortes.set({ ...this.cortes(), ii: valor });
     }
   }
+  /** Los de por defecto para este resultado: RI 0,25 e II en su umbral. */
+  protected readonly cortesDefecto = computed(() => cortesPorDefecto(this.resultado().umbral));
   protected readonly cortesCambiados = computed(
-    () => this.cortes().ri !== CORTES_POR_DEFECTO.ri || this.cortes().ii !== CORTES_POR_DEFECTO.ii,
+    () =>
+      this.cortes().ri !== this.cortesDefecto().ri || this.cortes().ii !== this.cortesDefecto().ii,
   );
   protected restablecerCortes(): void {
-    this.cortes.set({ ...CORTES_POR_DEFECTO });
+    this.cortes.set(this.cortesDefecto());
   }
+
+  /** true si algún registro es anomalía en alguna partición. */
+  protected readonly hayEnParticiones = computed(() =>
+    this.resultado().filas.some((f) => f.ri > 0),
+  );
 
   // --- Línea temporal ---
 
@@ -135,18 +136,12 @@ export class Resultados {
     { valor: this.resultado().umbral, etiqueta: `Umbral ${this.resultado().umbral}` },
   ]);
 
-  /** Se marcan los registros graves y las anomalías globales (los de más score si son muchos). */
-  protected readonly marcasTiempo = computed<MarcaPunto[]>(() => {
-    const cortes = this.cortes();
-    return this.resultado()
-      .filas.map((f) => ({ f, clase: clasificar(f, cortes) }))
-      .filter((x) => x.clase === 'grave' || x.f.anomalia)
-      .sort((a, b) => b.f.score - a.f.score)
+  /** Se marcan las anomalías globales (las de más score si son muchas). */
+  protected readonly marcasTiempo = computed<MarcaPunto[]>(() =>
+    this.resultado()
+      .filas.filter((f) => f.anomalia)
+      .sort((a, b) => b.score - a.score)
       .slice(0, MAX_MARCAS)
-      .map((x) => ({
-        x: x.f.registro,
-        y: x.f.score,
-        color: x.clase === 'grave' ? 'var(--estado-grave)' : 'var(--estado-limite)',
-      }));
-  });
+      .map((f) => ({ x: f.registro, y: f.score, color: 'var(--anomalia)' })),
+  );
 }
