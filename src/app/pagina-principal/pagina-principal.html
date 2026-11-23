@@ -294,10 +294,10 @@
         </section>
       }
 
-      <!-- Procesado de características y codificación (3.1.1 y 3.1.2 del artículo).
+      <!-- Procesado de características.
            Va fuera del @if de la tabla para poder corregir una operación que dé error -->
       @if (columnasBase().length > 0) {
-        <section class="tarjeta" aria-label="Procesado de características y codificación">
+        <section class="tarjeta" aria-label="Procesado de características">
           <app-panel-preparacion
             [columnaTimestamp]="columnaTimestamp()"
             [columnas]="columnasBase()"
@@ -305,11 +305,8 @@
             [delArticulo]="operaciones() === null"
             [sinFecha]="!tieneFecha()"
             [resumen]="fusion()"
-            [diccionarioEntrada]="diccionarioEntrada()"
             (aplicar)="aplicarProcesado($event)"
             (restablecer)="restablecerProcesado()"
-            (cargarDiccionario)="cambiarDiccionario($event)"
-            (descargarDiccionario)="fusion() && descargarDiccionario(fusion()!)"
           />
         </section>
       }
@@ -443,8 +440,7 @@
               Opcional. Cambia cada valor por (valor − media) / desviación de su columna, para usar
               el mismo dataset con otros algoritmos que necesitan los datos normalizados. Al
               Isolation Forest no le cambia las anomalías (corta cada columna entre su mínimo y su
-              máximo), pero sí la estimación de árboles y umbral. La desviación es la poblacional
-              (÷N), como StandardScaler de scikit-learn.
+              máximo). La desviación es la poblacional (÷N), como StandardScaler de scikit-learn.
             </p>
           </div>
           <label class="flex items-start gap-3">
@@ -460,8 +456,7 @@
                 Aplicar z-score a todas las columnas
               </span>
               <span class="block text-sm text-slate-600">
-                Se aplica después del procesado y la codificación, a la tabla que recibe el
-                Isolation Forest.
+                Se aplica después del procesado, a la tabla que recibe el Isolation Forest.
               </span>
             </span>
           </label>
@@ -677,7 +672,7 @@
     <!-- PASO 4 · AJUSTES                                                   -->
     <!-- ================================================================== -->
     @case (4) {
-      @if (fusion(); as f) {
+      @if (fusion()) {
         <!-- Los min/max/step de los inputs son solo ayuda visual;
              la comprobación de verdad la hace validarParametrosIF -->
         <form class="space-y-5" (ngSubmit)="ejecutarCifPaso()">
@@ -800,24 +795,6 @@
                 al umbral. Quitarlas no cambia qué filas son raras.
               </p>
             </div>
-
-            @if (avisoAplicado(); as texto) {
-              <p class="aviso-bien">
-                <span>✓ {{ texto }}</span>
-              </p>
-            }
-          </section>
-
-          <!-- Estimación de árboles y umbral (procedimiento 2 del artículo) -->
-          <section class="tarjeta" aria-label="Estimación de árboles y umbral">
-            <!-- Con z-score, la estimación se hace sobre la tabla normalizada (sí le afecta) -->
-            <app-panel-estimacion
-              [tabla]="tablaAnalizar() ?? f"
-              [parametrosIF]="parametrosIF"
-              [(ajustes)]="ajustesEstimacion"
-              [(resultado)]="estimacion"
-              (aplicar)="aplicarEstimacion($event)"
-            />
           </section>
 
           @if (errorCif(); as mensaje) {

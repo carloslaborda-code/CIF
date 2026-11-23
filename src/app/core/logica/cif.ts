@@ -1,5 +1,5 @@
 /**
- * Contextual Isolation Forest (procedimiento 3 del artículo).
+ * Contextual Isolation Forest (explicabilidad por contexto del artículo).
  *
  *   1. IF sobre la tabla completa: score global de cada fila (AD = las que pasan el umbral).
  *   2. IF por separado sobre cada partición de cada contexto (solo sus columnas).

@@ -24,18 +24,7 @@ import {
   VERSION_CONFIGURACION,
 } from '../core/logica/configuracion';
 import { Contexto, validarContextos } from '../core/logica/contextos';
-import {
-  Diccionario,
-  diccionarioACsv,
-  Operacion,
-  Preparacion,
-  procesadoDelArticulo,
-} from '../core/logica/preparar';
-import {
-  ESTIMACION_POR_DEFECTO,
-  ParametrosEstimacion,
-  ResultadoEstimacion,
-} from '../core/logica/estimar';
+import { Operacion, Preparacion, procesadoDelArticulo } from '../core/logica/preparar';
 import {
   aplicarFiltro,
   columnasACsv,
@@ -61,7 +50,6 @@ import {
 } from '../core/logica/pivotar';
 import { EditorContextos } from '../editor-contextos/editor-contextos';
 import { numero } from '../graficos/escala';
-import { PanelEstimacion, ValoresPropuestos } from '../panel-estimacion/panel-estimacion';
 import { PanelPreparacion } from '../panel-preparacion/panel-preparacion';
 import { PanelFiltros } from '../panel-filtros/panel-filtros';
 import { PanelRango } from '../panel-rango/panel-rango';
@@ -80,7 +68,7 @@ import { VistaPrevia } from '../vista-previa/vista-previa';
 /**
  * De dónde salen los datos:
  * - 'largo':    CSV en formato largo, se pivotan y se fusionan.
- * - 'pivotado': un CSV ya pivotado, solo se procesa y se codifica.
+ * - 'pivotado': un CSV ya pivotado, solo se procesa.
  */
 type OrigenDatos = 'largo' | 'pivotado';
 
@@ -93,7 +81,7 @@ const TITULOS = ['Datos', 'Preparar', 'Contextos', 'Ajustes', 'Resultados'];
  *   1. Datos       elegir los CSV (o una configuración guardada) y leerlos
  *   2. Preparar    filtrar lecturas, procesar características y revisar la tabla
  *   3. Contextos   definir contextos y particiones
- *   4. Ajustes     parámetros del Isolation Forest y estimación de árboles y umbral
+ *   4. Ajustes     parámetros del Isolation Forest
  *   5. Resultados  tabla, gráficos y descargas
  *
  * Solo gestiona la vista y el estado; la lógica está en core/logica.
@@ -109,7 +97,6 @@ const TITULOS = ['Datos', 'Preparar', 'Contextos', 'Ajustes', 'Resultados'];
     PanelRango,
     PanelPreparacion,
     EditorContextos,
-    PanelEstimacion,
     Resultados,
   ],
   templateUrl: './pagina-principal.html',
@@ -185,13 +172,11 @@ export class PaginaPrincipal {
   // Va aparte de `origen` porque el usuario puede cambiar el selector después de procesar.
   protected readonly origenProcesado = signal<OrigenDatos>('largo');
   /**
-   * Operaciones del procesado de características (3.1.1). null = las del
+   * Operaciones del procesado de características. null = las del
    * experimento del artículo (DD, MM, HH y MIN del timestamp), que se montan con
    * el nombre de la columna del timestamp al hacer la tabla.
    */
   protected readonly operaciones = signal<Operacion[] | null>(null);
-  /** Diccionario de entrada de la codificación (3.1.2). Empieza vacío. */
-  protected readonly diccionarioEntrada = signal<Diccionario>({});
   /** Preparación con la que se ha generado `fusion` (va al JSON de configuración). */
   protected readonly preparacionProcesada = signal<Preparacion | null>(null);
   /** Columnas de la tabla antes del procesado (para elegirlas en las operaciones). */
@@ -215,15 +200,8 @@ export class PaginaPrincipal {
       this.operaciones() ??
       (this.tieneFecha() ? procesadoDelArticulo(this.columnaTimestamp()) : []),
   );
-  /** Ajustes de la estimación de hiperparámetros y su último resultado. */
-  protected readonly ajustesEstimacion = signal<ParametrosEstimacion>({
-    ...ESTIMACION_POR_DEFECTO,
-  });
-  protected readonly estimacion = signal<ResultadoEstimacion | null>(null);
   /** Por qué no se ha guardado el dataset en columnas (le faltan datos), o null. */
   protected readonly avisoDataset = signal<string | null>(null);
-  /** Aviso que sale al aplicar los valores estimados. */
-  protected readonly avisoAplicado = signal<string | null>(null);
   /** true mientras se calcula el CIF. */
   protected readonly ejecutando = signal(false);
   /** IF global + IF por partición con RI e II. */
@@ -363,10 +341,8 @@ export class PaginaPrincipal {
     this.error.set(null);
   }
 
-  /** Quita lo que se ha calculado sobre la tabla (estimación y CIF): ya no corresponde. */
+  /** Quita lo que se ha calculado sobre la tabla (el CIF): ya no corresponde. */
   private quitarCalculos(): void {
-    this.estimacion.set(null);
-    this.avisoAplicado.set(null);
     this.resultadoCif.set(null);
     this.errorCif.set(null);
     // Si se estaba en los resultados, ya no hay nada que ver ahí.
@@ -377,7 +353,7 @@ export class PaginaPrincipal {
 
   /**
    * Formato largo: lee los CSV, aplica el filtro, los pivota y los fusiona por tipo.
-   * Ya pivotado: lee el CSV, lo procesa y lo codifica.
+   * Ya pivotado: lee el CSV y lo procesa.
    * Si todo va bien, pasa al paso 2. Si los datos se han leído pero la tabla no
    * se ha podido hacer (faltan datos o una operación falla), también, porque es
    * allí donde se puede cambiar el filtro o las operaciones y se ve el error.
@@ -452,7 +428,7 @@ export class PaginaPrincipal {
     }
   }
 
-  /** Lee un CSV ya pivotado, lo procesa y lo codifica; queda listo para los contextos y el CIF. */
+  /** Lee un CSV ya pivotado y lo procesa; queda listo para los contextos y el CIF. */
   private async procesarPivotado(ficheros: File[]): Promise<void> {
     // Un CSV pivotado ya es la tabla entera, no tiene sentido juntar varios.
     if (ficheros.length !== 1) {
@@ -519,7 +495,7 @@ export class PaginaPrincipal {
     this.preparacionProcesada.set(preparacion);
   }
 
-  /** Procesa y codifica un CSV ya pivotado (sin volver a leerlo). */
+  /** Procesa un CSV ya pivotado (sin volver a leerlo). */
   private prepararPivotado(cargada: TablaPivotada): void {
     this.quitarCalculos();
     this.error.set(null);
@@ -543,7 +519,6 @@ export class PaginaPrincipal {
     return {
       operaciones:
         this.operaciones() ?? (sinFecha ? [] : procesadoDelArticulo(columnaTimestamp)),
-      diccionario: this.diccionarioEntrada(),
     };
   }
 
@@ -609,7 +584,7 @@ export class PaginaPrincipal {
   });
 
   /**
-   * La tabla que reciben la estimación y el CIF: la preparada o, con z-score, la
+   * La tabla que recibe el CIF: la preparada o, con z-score, la
    * normalizada. null si no hay tabla o si el z-score ha dado error.
    */
   protected readonly tablaAnalizar = computed<TablaPivotada | null>(() => {
@@ -622,7 +597,7 @@ export class PaginaPrincipal {
     return p.filter((x) => x.desviacion === 0).length;
   }
 
-  /** Activa o quita el z-score. Lo calculado antes (estimación y CIF) ya no vale. */
+  /** Activa o quita el z-score. Lo calculado antes (el CIF) ya no vale. */
   protected cambiarZscore(activo: boolean): void {
     this.zscore.set(activo);
     this.quitarCalculos();
@@ -708,7 +683,7 @@ export class PaginaPrincipal {
     );
   }
 
-  /** Aplica las operaciones del procesado de características (3.1.1). */
+  /** Aplica las operaciones del procesado de características. */
   protected aplicarProcesado(operaciones: Operacion[]): void {
     this.operaciones.set(operaciones);
     this.rehacerTabla('Procesado aplicado.');
@@ -718,18 +693,6 @@ export class PaginaPrincipal {
   protected restablecerProcesado(): void {
     this.operaciones.set(null);
     this.rehacerTabla('Procesado por defecto aplicado.');
-  }
-
-  /** Cambia el diccionario con el que empieza la codificación (3.1.2). */
-  protected cambiarDiccionario(diccionario: Diccionario): void {
-    this.diccionarioEntrada.set(diccionario);
-    this.rehacerTabla(
-      Object.keys(diccionario).length > 0 ? 'Diccionario cargado.' : 'Diccionario vaciado.',
-    );
-  }
-
-  protected descargarDiccionario(f: TablaFusionada): void {
-    this.guardarFichero(diccionarioACsv(f.diccionario), 'diccionario.csv');
   }
 
   /** Rehace la tabla con lo que hay en el formulario, sin leer otra vez el CSV. */
@@ -802,17 +765,6 @@ export class PaginaPrincipal {
     this.parametrosIF.semillaFija = true;
     this.parametrosIF.semilla = semilla;
     this.anuncio.set(`Semilla ${semilla} fijada.`);
-  }
-
-  /** Copia al formulario los valores que propone la estimación. */
-  protected aplicarEstimacion(v: ValoresPropuestos): void {
-    this.parametrosIF.numArboles = v.numArboles;
-    this.parametrosIF.umbral = v.umbral;
-    this.parametrosIF.semillaFija = true;
-    this.parametrosIF.semilla = v.semilla;
-    const texto = `Valores aplicados: ${v.numArboles} árboles, umbral ${numero(v.umbral, 2)} y semilla ${v.semilla}.`;
-    this.avisoAplicado.set(texto);
-    this.anuncio.set(texto);
   }
 
   /**
@@ -890,13 +842,11 @@ export class PaginaPrincipal {
       filtro: this.filtro(),
       rango: this.rango(),
       zscore: this.configuracionZscore(),
-      // Las operaciones que se usaron y el diccionario que salió de la tabla, para que
-      // otros datos se codifiquen con los mismos números.
+      // Las operaciones que se usaron.
       preparacion: {
         operaciones:
           this.preparacionProcesada()?.operaciones ??
           this.preparacionPara(this.parametros.timestamp, !this.tieneFecha()).operaciones,
-        diccionario: this.fusion()?.diccionario ?? this.diccionarioEntrada(),
       },
       // La muestra que se usó de verdad: con los mismos datos da el mismo resultado
       // que la pedida, porque ya es min(pedida, nº de filas).
@@ -915,7 +865,6 @@ export class PaginaPrincipal {
           },
       semilla: r ? r.semilla : this.parametrosIF.semillaFija ? this.parametrosIF.semilla : null,
       contextos: r ? r.contextos : this.contextos,
-      estimacion: this.ajustesEstimacion(),
       cortes: this.cortes(),
     };
     const nombre =
@@ -927,8 +876,8 @@ export class PaginaPrincipal {
 
   /**
    * Carga un JSON de configuración y rellena con él todo el formulario:
-   * tipo de CSV, columnas, filtro, preparación, parámetros, semilla (fija), contextos,
-   * ajustes de la estimación y cortes de la clasificación.
+   * tipo de CSV, columnas, filtro, preparación, parámetros, semilla (fija), contextos
+   * y cortes de la clasificación.
    */
   protected async cargarConfiguracion(evento: Event): Promise<void> {
     const input = evento.target as HTMLInputElement;
@@ -975,14 +924,12 @@ export class PaginaPrincipal {
       }
       this.errorParametros.set(null);
       this.operaciones.set(c.preparacion.operaciones);
-      this.diccionarioEntrada.set(c.preparacion.diccionario);
       this.parametrosIF = {
         ...c.parametros,
         semillaFija: c.semilla !== null,
         semilla: c.semilla ?? this.parametrosIF.semilla,
       };
       this.contextos = c.contextos;
-      this.ajustesEstimacion.set(c.estimacion);
       this.cortes.set(c.cortes);
 
       if (puedeReaplicar) {

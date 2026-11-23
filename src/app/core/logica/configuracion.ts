@@ -7,16 +7,9 @@
  */
 import { CORTES_POR_DEFECTO, CortesClasificacion, validarCortes } from './clasificar';
 import type { Contexto } from './contextos';
-import { ESTIMACION_POR_DEFECTO, ParametrosEstimacion, validarEstimacion } from './estimar';
 import { CampoFiltro, FiltroLecturas, SIN_FILTRO } from './filtrar';
 import type { ParametrosColumnas } from './pivotar';
-import {
-  OPCIONES_EXTRACCION,
-  Operacion,
-  Preparacion,
-  SIN_PREPARACION,
-  validarDiccionario,
-} from './preparar';
+import { OPCIONES_EXTRACCION, Operacion, Preparacion, SIN_PREPARACION } from './preparar';
 import { ParametrosNormalizacion, validarParametros as validarParametrosZscore } from './normalizar';
 import { RangoRegistros, SIN_RANGO, validarRango } from './rango';
 import { validarSemilla } from './semilla';
@@ -65,11 +58,7 @@ export interface ConfiguracionCif {
   filtro: FiltroLecturas;
   /** Rango de registros (rango.ts). SIN_RANGO en ficheros antiguos. */
   rango: RangoRegistros;
-  /**
-   * Procesado de características (3.1.1) y diccionario de la codificación (3.1.2).
-   * Al guardar, el diccionario es el que salió de la tabla (el de entrada más los
-   * valores nuevos), así otros datos se codifican con los mismos números.
-   */
+  /** Procesado de características. */
   preparacion: Preparacion;
   /** Normalización z-score. SIN_ZSCORE en ficheros antiguos. */
   zscore: ConfiguracionZscore;
@@ -82,8 +71,6 @@ export interface ConfiguracionCif {
   /** Semilla usada. null si se guardó antes de ejecutar y sin semilla fija. */
   semilla: number | null;
   contextos: Contexto[];
-  /** Ajustes de la estimación de hiperparámetros (con la semilla, basta para repetirla). */
-  estimacion: ParametrosEstimacion;
   /** Cortes de RI e II para clasificar en grave, límite o normal. */
   cortes: CortesClasificacion;
 }
@@ -192,23 +179,14 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
   }
 
   // La preparación se añadió después. Si falta, no se procesa nada (así se
-  // repiten igual los resultados de antes), aunque lo que es texto se codifica.
-  const preparacion: Preparacion = {
-    operaciones: [...SIN_PREPARACION.operaciones],
-    diccionario: { ...SIN_PREPARACION.diccionario },
-  };
+  // repiten igual los resultados de antes).
+  const preparacion: Preparacion = { operaciones: [...SIN_PREPARACION.operaciones] };
   if (typeof d.preparacion === 'object' && d.preparacion !== null) {
     const pr = d.preparacion;
     if (!Array.isArray(pr.operaciones)) {
       throw new Error('La preparación debe traer una lista de operaciones.');
     }
     preparacion.operaciones = pr.operaciones.map(leerOperacion);
-    const diccionario = pr.diccionario ?? {};
-    const errorDiccionario = validarDiccionario(diccionario);
-    if (errorDiccionario) {
-      throw new Error(errorDiccionario);
-    }
-    preparacion.diccionario = { ...diccionario };
   }
 
   // El z-score se añadió después: si falta, sin normalizar.
@@ -244,19 +222,7 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     }
   }
 
-  // La estimación y los cortes se añadieron después: si faltan, los del artículo.
-  const estimacion: ParametrosEstimacion = { ...ESTIMACION_POR_DEFECTO };
-  if (typeof d.estimacion === 'object' && d.estimacion !== null) {
-    for (const campo of Object.keys(estimacion) as (keyof ParametrosEstimacion)[]) {
-      if (typeof d.estimacion[campo] === 'number') {
-        estimacion[campo] = d.estimacion[campo];
-      }
-    }
-    const errorEstimacion = validarEstimacion(estimacion);
-    if (errorEstimacion) {
-      throw new Error(errorEstimacion);
-    }
-  }
+  // Los cortes se añadieron después: si faltan, los del artículo.
   const cortes: CortesClasificacion = { ...CORTES_POR_DEFECTO };
   if (typeof d.cortes === 'object' && d.cortes !== null) {
     if (typeof d.cortes.ri === 'number') cortes.ri = d.cortes.ri;
@@ -288,7 +254,6 @@ export function leerConfiguracion(texto: string): ConfiguracionCif {
     },
     semilla: d.semilla,
     contextos,
-    estimacion,
     cortes,
   };
 }

@@ -1,20 +1,11 @@
-import { Component, computed, input, linkedSignal, output } from '@angular/core';
+import { Component, input, linkedSignal, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import {
-  Diccionario,
-  leerDiccionarioCsv,
-  OPCIONES_EXTRACCION,
-  Operacion,
-  validarOperaciones,
-} from '../core/logica/preparar';
+import { OPCIONES_EXTRACCION, Operacion, validarOperaciones } from '../core/logica/preparar';
 
 /** Lo que enseña el panel del resultado de la última preparación. */
 export interface ResumenPreparacion {
   columnasNuevas: string[];
-  columnasCodificadas: string[];
-  diccionario: Diccionario;
-  valoresNuevos: number;
 }
 
 /** Nombre de cada tipo de operación para enseñarlo. */
@@ -26,12 +17,12 @@ const NOMBRE_OPERACION: Record<Operacion['tipo'], string> = {
 };
 
 /**
- * Procesado de características (3.1.1) y codificación (3.1.2) del artículo.
+ * Procesado de características del artículo.
  *
  * Se usa así:
  *   <app-panel-preparacion [columnaTimestamp]="..." [columnas]="..." [operaciones]="..."
- *     [delArticulo]="..." [sinFecha]="..." [resumen]="..." [diccionarioEntrada]="..."
- *     (aplicar)="..." (restablecer)="..." (cargarDiccionario)="..." (descargarDiccionario)="..." />
+ *     [delArticulo]="..." [sinFecha]="..." [resumen]="..."
+ *     (aplicar)="..." (restablecer)="..." />
  *
  * Las operaciones se editan en un borrador y solo se aplican (y se rehace la
  * tabla) al pulsar el botón, igual que el filtro.
@@ -55,18 +46,12 @@ export class PanelPreparacion {
   readonly sinFecha = input(false);
   /** Resultado de la última preparación, o null si dio error. */
   readonly resumen = input<ResumenPreparacion | null>(null);
-  /** Diccionario con el que empieza la codificación. */
-  readonly diccionarioEntrada = input.required<Diccionario>();
 
   readonly aplicar = output<Operacion[]>();
   readonly restablecer = output<void>();
-  readonly cargarDiccionario = output<Diccionario>();
-  readonly descargarDiccionario = output<void>();
 
   protected readonly opcionesExtraccion = OPCIONES_EXTRACCION;
   protected readonly nombreOperacion = NOMBRE_OPERACION;
-  /** Cuántas columnas codificadas se enseñan por su nombre antes de resumir. */
-  protected readonly maxNombres = 12;
 
   /** Copia editable de las operaciones; se reinicia cuando cambian las aplicadas. */
   protected readonly borrador = linkedSignal<Operacion[]>(() =>
@@ -144,30 +129,6 @@ export class PanelPreparacion {
   protected alAplicar(): void {
     if (this.error() === null) {
       this.aplicar.emit(structuredClone(this.borrador()));
-    }
-  }
-
-  // -- Codificación ---------------------------------------------------------
-
-  protected readonly valoresEntrada = computed(() => Object.keys(this.diccionarioEntrada()).length);
-  protected readonly valoresDiccionario = computed(
-    () => Object.keys(this.resumen()?.diccionario ?? {}).length,
-  );
-  /** Error al leer un diccionario. */
-  protected errorDiccionario: string | null = null;
-
-  protected async alElegirDiccionario(evento: Event): Promise<void> {
-    const input = evento.target as HTMLInputElement;
-    const fichero = input.files?.[0];
-    input.value = '';
-    if (!fichero) {
-      return;
-    }
-    try {
-      this.errorDiccionario = null;
-      this.cargarDiccionario.emit(leerDiccionarioCsv(await fichero.text()));
-    } catch (e) {
-      this.errorDiccionario = e instanceof Error ? e.message : String(e);
     }
   }
 }

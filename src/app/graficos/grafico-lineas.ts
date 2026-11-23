@@ -10,7 +10,7 @@ export interface SerieLineas {
   puntos: { x: number; y: number }[];
 }
 
-/** Línea recta de referencia (un umbral, el valor propuesto...). */
+/** Línea horizontal de referencia (por ejemplo, el umbral). */
 export interface LineaReferencia {
   valor: number;
   etiqueta: string;
@@ -26,8 +26,7 @@ export interface MarcaPunto {
 /**
  * Gráfico de líneas en SVG, hecho a mano (sin librerías).
  *
- * Se usa para las métricas por número de árboles (Fig. 6), el umbral por
- * contaminación (Fig. 7) y la línea temporal del score.
+ * Se usa para la línea temporal del score.
  *
  * Accesibilidad: al pasar el ratón, o con las flechas del teclado si tiene el
  * foco, enseña los valores del punto; y debajo hay una tabla con los mismos
@@ -48,16 +47,10 @@ export class GraficoLineas {
   /** Cómo escribir un valor de x y de y (en los ejes, el recuadro y la tabla). */
   readonly formatoX = input<(x: number) => string>((x) => String(x));
   readonly formatoY = input<(y: number) => string>((y) => y.toFixed(2));
-  /** Líneas horizontales (valor en el eje y) y verticales (valor en el eje x). */
+  /** Líneas horizontales (valor en el eje y). */
   readonly lineasH = input<LineaReferencia[]>([]);
-  readonly lineasV = input<LineaReferencia[]>([]);
   readonly marcas = input<MarcaPunto[]>([]);
-  /** Límites del eje y. Si no se dan, se ajustan a los datos. */
-  readonly minY = input<number | null>(null);
-  readonly maxY = input<number | null>(null);
   readonly alto = input(260);
-  /** Pinta un punto en cada dato (solo conviene con pocos datos). */
-  readonly conPuntos = input(false);
   /** Filas que enseña la tabla de datos como mucho. */
   readonly maxFilasTabla = input(200);
 
@@ -83,7 +76,7 @@ export class GraficoLineas {
       ...this.marcas().map((m) => m.y),
     ];
     const { min, max } = extremos(valores);
-    return marcasBonitas(this.minY() ?? min, this.maxY() ?? max, 5);
+    return marcasBonitas(min, max, 5);
   });
 
   protected readonly px = computed(() => {

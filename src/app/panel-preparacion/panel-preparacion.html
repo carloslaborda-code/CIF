@@ -1,4 +1,4 @@
-<!-- 3.1.1 Procesado de características -->
+<!-- Procesado de características -->
 <section class="space-y-3" aria-labelledby="titulo-procesado">
   <div class="max-w-3xl">
     <h3 id="titulo-procesado" class="text-base font-semibold text-slate-900">
@@ -229,83 +229,5 @@
         <span class="font-mono">{{ r.columnasNuevas.join(', ') }}</span>
       </p>
     }
-  }
-</section>
-
-<!-- 3.1.2 Codificación -->
-<section class="space-y-3 border-t border-slate-200 pt-5" aria-labelledby="titulo-codificacion">
-  <div class="max-w-3xl">
-    <h3 id="titulo-codificacion" class="text-base font-semibold text-slate-900">Codificación</h3>
-    <p class="ayuda">
-      El Isolation Forest solo trabaja con números. Las columnas con texto se pasan a números con un
-      diccionario (un número distinto por cada valor, empezando en 1). Las que ya son numéricas no
-      se tocan. Guardar el diccionario y cargarlo con otros datos hace que los mismos valores tengan
-      el mismo número.
-    </p>
-  </div>
-
-  @if (resumen(); as r) {
-    @if (r.columnasCodificadas.length === 0) {
-      <p class="text-sm text-slate-700">
-        No se ha codificado ninguna columna: todas son numéricas.
-      </p>
-    } @else {
-      <p class="aviso-info">
-        <span>
-          <strong
-            >{{ r.columnasCodificadas.length }}
-            {{
-              r.columnasCodificadas.length === 1 ? 'columna codificada' : 'columnas codificadas'
-            }}:</strong
-          >
-          <span class="font-mono">
-            {{ r.columnasCodificadas.slice(0, maxNombres).join(', ') }}
-          </span>
-          @if (r.columnasCodificadas.length > maxNombres) {
-            y {{ r.columnasCodificadas.length - maxNombres }} más.
-          }
-          Si alguna tenía que ser numérica, revisa el CSV (por ejemplo, decimales con coma).
-        </span>
-      </p>
-    }
-    <p class="text-sm text-slate-700">
-      Diccionario: <strong class="tabular-nums">{{ valoresDiccionario() }}</strong>
-      {{ valoresDiccionario() === 1 ? 'valor' : 'valores' }}
-      @if (valoresEntrada() > 0) {
-        ({{ valoresEntrada() }} del diccionario cargado y {{ r.valoresNuevos }} nuevos)
-      }
-    </p>
-  }
-
-  <div class="flex flex-wrap gap-2">
-    <label
-      class="btn-secundario focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue-700"
-    >
-      Cargar diccionario (.csv)
-      <input
-        type="file"
-        accept=".csv,text/csv"
-        class="sr-only"
-        (change)="alElegirDiccionario($event)"
-      />
-    </label>
-    <button
-      type="button"
-      class="btn-secundario"
-      [disabled]="valoresDiccionario() === 0"
-      (click)="descargarDiccionario.emit()"
-    >
-      Descargar diccionario (diccionario.csv)
-    </button>
-    @if (valoresEntrada() > 0) {
-      <button type="button" class="btn-secundario" (click)="cargarDiccionario.emit({})">
-        Empezar con el diccionario vacío
-      </button>
-    }
-  </div>
-  @if (errorDiccionario; as mensaje) {
-    <p class="aviso-error" role="alert">
-      <span>{{ mensaje }}</span>
-    </p>
   }
 </section>

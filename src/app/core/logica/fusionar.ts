@@ -9,9 +9,9 @@
  *      como tipo_id, para que no se mezclen ids iguales de tipos distintos.
  *   3. Alinear: una fila por cada timestamp de cualquier tipo, y todas las columnas.
  *   4. Comprobar que no falta ningún dato.
- *   5. Procesado de características y codificación (preparar.ts).
+ *   5. Procesado de características (preparar.ts).
  *
- * El paso 5 son las fases 3.1.1 y 3.1.2 del artículo. La fase de nulos (3.1.3) no
+ * El paso 5 es el procesado de características del artículo. La fase de nulos no
  * la hace la herramienta: como dijo el tutor, los nulos se tratan antes de pasarle
  * el CSV, y si faltan datos Isolation Forest no puede ejecutarse. Por eso, si al
  * alinear queda algún hueco (un momento en el que un sensor no tiene lectura), se
@@ -33,7 +33,12 @@ import {
   pivotar,
   TablaPivotada,
 } from './pivotar';
-import { Diccionario, Preparacion, prepararCaracteristicas, SIN_PREPARACION } from './preparar';
+import {
+  comprobarNumerica,
+  Preparacion,
+  prepararCaracteristicas,
+  SIN_PREPARACION,
+} from './preparar';
 import { aplicarRango, RangoRegistros, SIN_RANGO } from './rango';
 
 /** Nombre que se usa cuando una fila no tiene tipo. */
@@ -56,14 +61,8 @@ export interface ResumenTipo {
  */
 export interface TablaFusionada extends TablaPivotada {
   tipos: ResumenTipo[];
-  /** Características que ha añadido el procesado (3.1.1). */
+  /** Características que ha añadido el procesado. */
   columnasNuevas: string[];
-  /** Características cualitativas que se han codificado (3.1.2). */
-  columnasCodificadas: string[];
-  /** Diccionario de la codificación: el de entrada más los valores nuevos. */
-  diccionario: Diccionario;
-  /** Cuántos valores nuevos se han añadido al diccionario. */
-  valoresNuevos: number;
 }
 
 /** Los registros con huecos de una tabla, con su momento para poder encontrarlos. */
@@ -97,8 +96,9 @@ export function comprobarSinHuecos(alineada: TablaPivotada): void {
 }
 
 /**
- * Comprobación, procesado y codificación, en el orden de la Fig. 1 del artículo.
- * Lo comparten el CSV largo (después de alinear) y el ya pivotado.
+ * Comprobación y procesado, en el orden de la Fig. 1 del artículo.
+ * Lo comparten el CSV largo (después de alinear) y el ya pivotado. Al final,
+ * todas las columnas tienen que ser numéricas (el IF solo trabaja con números).
  *
  * El procesado también puede dejar celdas vacías (por ejemplo, sacar el día de
  * una columna que no es una fecha, o añadir una columna con valor vacío). Como
@@ -120,13 +120,8 @@ function comprobarYPreparar(
       ].join('\n'),
     );
   }
-  return {
-    ...p.tabla,
-    columnasNuevas: p.columnasNuevas,
-    columnasCodificadas: p.columnasCodificadas,
-    diccionario: p.diccionario,
-    valoresNuevos: p.valoresNuevos,
-  };
+  comprobarNumerica(p.tabla);
+  return { ...p.tabla, columnasNuevas: p.columnasNuevas };
 }
 
 /** Divide las lecturas por tipo. Los tipos salen ordenados alfabéticamente. */
@@ -215,7 +210,7 @@ export function alinear(tablas: TablaPivotada[], columnaTimestamp: string): Tabl
 
 /**
  * Proceso completo: divide por tipo, pivota cada tipo, alinea, se queda con el
- * rango de registros, comprueba que no falta ningún dato y procesa y codifica
+ * rango de registros, comprueba que no falta ningún dato y procesa
  * las características. Lanza un error si faltan datos dentro del rango (ver
  * comprobarSinHuecos) o si el rango no cabe en la tabla.
  */
@@ -226,7 +221,7 @@ export function fusionar(
   rango: RangoRegistros = SIN_RANGO,
 ): TablaFusionada {
   const { tabla, tipos } = alinearPorTipo(lecturas, columnaTimestamp);
-  // 4 y 5. Rango, comprobar, procesar y codificar
+  // 4 y 5. Rango, comprobar y procesar
   return { ...comprobarYPreparar(aplicarRango(tabla, rango), preparacion), tipos };
 }
 
@@ -253,7 +248,7 @@ function alinearPorTipo(
 
 /**
  * Para un CSV que ya viene pivotado: no hay que dividir ni alinear, solo
- * quedarse con el rango de registros, procesar y codificar. Al leerlo ya se ha
+ * quedarse con el rango de registros y procesar. Al leerlo ya se ha
  * comprobado que no le faltan datos, pero se vuelve a mirar por si la tabla
  * llega de otro sitio. Se devuelve como TablaFusionada (sin tipos) para que el
  * resto de la página (vista previa, descarga, CIF) lo trate igual.
@@ -268,8 +263,8 @@ export function prepararTablaPivotada(
 
 /**
  * El dataset en columnas para guardarlo y cargarlo otra vez como "tabla ya hecha":
- * separado por tipo y alineado (columnas tipo_id), pero sin procesado ni
- * codificación. Al cargarlo, el paso 2 hace lo mismo que con el CSV largo.
+ * separado por tipo y alineado (columnas tipo_id), pero sin procesar. Al
+ * cargarlo, el paso 2 hace lo mismo que con el CSV largo.
  * Si le faltan datos, se devuelve con los huecos vacíos: quien lo guarda tiene
  * que comprobarlo, porque una tabla con huecos no se puede volver a cargar.
  * Con un rango de registros, solo esas filas (en el fichero guardado, la

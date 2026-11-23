@@ -27,9 +27,9 @@ Abre http://localhost:4200. La aplicación es un asistente de cinco pasos; la ba
    - **Ya pivotado:** un solo CSV con una fila por momento y una columna por sensor (por ejemplo, el `dataset.csv` que se guarda en el paso 2). Puede no tener columna de fecha: entonces se marca «El CSV no tiene columna de fecha» y cada fila se identifica por su número de registro. No se pivota ni se fusiona, pero sí pasa por la preparación de datos del paso 2. Un `2_fusionado.csv` ya viene preparado: si se vuelve a cargar con el procesado por defecto, da error porque ya tiene la columna `DD`.
 
    Si falta algún dato, la tabla no se hace y se dice en qué registros (ver «Datos que faltan»).
-2. **Preparar.** Rango de registros, procesado de características y codificación (ver «Preparación de datos»), z-score opcional (ver «Normalización z-score») y revisión de la tabla resultante. Si quieres, filtra las lecturas por tipo de medida (`name`), aulario (`alias`) o sensor (`uid`). Nada de esto vuelve a leer el CSV.
+2. **Preparar.** Rango de registros, procesado de características (ver «Preparación de datos»), z-score opcional (ver «Normalización z-score») y revisión de la tabla resultante. Si quieres, filtra las lecturas por tipo de medida (`name`), aulario (`alias`) o sensor (`uid`). Nada de esto vuelve a leer el CSV.
 3. **Contextos.** Un contexto es una forma de mirar la instalación (por tipo, por edificio…) y sus particiones son los grupos de sensores que salen al mirarla así. Se pueden crear a mano o con «Contexto automático por tipo de medida». Sin contextos solo se calcula el IF global, sin RI ni II.
-4. **Ajustes.** Parámetros del Isolation Forest y semilla. Con «Estimar árboles y umbral» la herramienta propone esos dos valores para tus datos (ver más abajo) y tú decides si los usas.
+4. **Ajustes.** Parámetros del Isolation Forest y semilla.
 5. **Resultados.** Resumen arriba (registros, anomalías, graves y límite) y seis pestañas. Cada fila se identifica por su número de registro:
    - **Tabla:** la tabla CIF, como la Tabla 5 del artículo.
    - **Mapa RI–II:** gráfico de burbujas (Fig. 9). Aquí se cambian los cortes de la clasificación.
@@ -78,6 +78,8 @@ En el registro 42589 faltan datos (columna "Caudal2 (m³/h)").
 
 Si el procesado de características deja celdas vacías (por ejemplo, sacar el día de una columna que no es una fecha), también es un error, que apunta a las operaciones.
 
+Todas las columnas tienen que ser numéricas, porque el Isolation Forest solo trabaja con números. Si alguna tiene un valor que no es un número, la tabla no se hace y se dice qué columnas son.
+
 ## Parámetros
 
 Todos los valores por defecto son los del artículo.
@@ -93,7 +95,6 @@ Todos los valores por defecto son los del artículo.
 | El CSV no tiene columna de fecha | no | Solo con «Una tabla ya hecha». Todas las columnas son datos y cada fila es su número de registro |
 | Rango de registros | toda la tabla | Desde y hasta qué registro se analiza (incluidos) |
 | Procesado de características | DD, MM, HH y MIN | Operaciones que se aplican en orden. Por defecto, las del experimento del artículo: día, mes, hora y minuto de la fecha. Sin columna de fecha, ninguna |
-| Diccionario de la codificación | vacío | Se puede cargar uno guardado para que los mismos valores de texto tengan el mismo número |
 | Z-score | no | Normaliza todas las columnas con la media y la desviación de estos datos o con unas guardadas |
 
 **Isolation Forest (paso 4)**
@@ -106,14 +107,6 @@ Todos los valores por defecto son los del artículo.
 | Semilla | al azar | Marcando «Usar siempre esta semilla», cada ejecución da el mismo resultado. La partición *k* usa semilla + *k* |
 | Quitar columnas constantes | sí | Un sensor que vale siempre lo mismo acerca todos los scores a 0,5 en el IF de Emilia, y las anomalías no llegan al umbral |
 
-**Estimación de árboles y umbral (paso 4, «Ajustes de la estimación»)**
-
-| Parámetro | Por defecto | Significado |
-|---|---|---|
-| Registros contaminados | `1 %` | Parte del subconjunto de registros normales que se contamina |
-| Subida del valor | `50 %` | Cuánto se sube el valor contaminado al estimar los árboles |
-| Características contaminadas por registro | `1` | Cuántas columnas se suben en cada registro contaminado. Pueden ser sensores o columnas creadas en el procesado, como DD o HH |
-
 **Clasificación (paso 5, pestaña «Mapa RI–II»)**
 
 | Parámetro | Por defecto | Significado |
@@ -123,7 +116,7 @@ Todos los valores por defecto son los del artículo.
 
 ## Preparación de datos
 
-Es el procedimiento 1 del artículo (`core/logica/preparar.ts` y `fusionar.ts`). Sus fases se aplican en el orden de la Fig. 1: procesado de características, codificación, valores nulos y contextos. Antes se aplica el rango de registros y se comprueba que no falta ningún dato.
+Es la preparación de datos del artículo (`core/logica/preparar.ts` y `fusionar.ts`). Sus fases se aplican en el orden de la Fig. 1: procesado de características, valores nulos y contextos. Antes se aplica el rango de registros y se comprueba que no falta ningún dato. Al final, todas las columnas tienen que ser numéricas.
 
 1. **Procesado de características.** Una lista de operaciones que se aplican una detrás de otra:
    - **Extraer:** saca de una fecha el día, el mes, el año, la hora, el minuto o el día de la semana (1 = lunes … 7 = domingo), o un trozo de un texto.
@@ -132,15 +125,12 @@ Es el procedimiento 1 del artículo (`core/logica/preparar.ts` y `fusionar.ts`).
    - **Añadir:** crea una columna con el mismo valor en todas las filas.
 
    Por defecto se hace lo mismo que el artículo en su experimento: sacar DD, MM, HH y MIN del timestamp. Las columnas nuevas van al final de la tabla y se pueden usar en los contextos. El timestamp nunca es una característica: solo identifica la fila.
-2. **Codificación.** El Isolation Forest solo trabaja con números. Las columnas con algún valor de texto se pasan a números con un diccionario único para toda la tabla. Las columnas numéricas no se tocan. El diccionario se puede descargar (`diccionario.csv`) y volver a cargar con otros datos.
-3. **Valores nulos.** Se tratan antes de cargar el CSV, no en la herramienta (ver «Datos que faltan»).
+2. **Valores nulos.** Se tratan antes de cargar el CSV, no en la herramienta (ver «Datos que faltan»).
 
 Lo que el artículo no concreta y se ha decidido aquí:
 
-- **Combinación:** une los dos valores como texto con `_`. Después la codificación lo convierte en número.
+- **Combinación:** une los dos valores como texto con `_`. El resultado no es un número, así que la tabla da error si esa columna se queda.
 - **Fechas:** se leen tal como están escritas en el CSV (ISO o `DD/MM/YYYY HH:MM:SS`), sin cambiar de zona horaria.
-- **Columnas mixtas:** si una columna tiene algún valor de texto, se codifican todos sus valores, también los que son números, para no confundir un código con un valor real.
-- **Códigos:** empiezan en 1.
 
 ## Rango de registros
 
@@ -152,41 +142,26 @@ Lo que el artículo no concreta y se ha decidido aquí:
 
 ## Normalización z-score
 
-`core/logica/normalizar.ts`. Opcional, en el paso 2. Cambia cada valor por (valor − media) / desviación de su columna, para usar el mismo dataset, con los mismos números, en otros algoritmos que necesitan los datos normalizados. Al Isolation Forest no le cambia las anomalías (corta cada columna entre su mínimo y su máximo), pero sí la estimación de árboles y umbral.
+`core/logica/normalizar.ts`. Opcional, en el paso 2. Cambia cada valor por (valor − media) / desviación de su columna, para usar el mismo dataset, con los mismos números, en otros algoritmos que necesitan los datos normalizados. Al Isolation Forest no le cambia las anomalías (corta cada columna entre su mínimo y su máximo).
 
-- **Todas las columnas** de la tabla que recibe el IF, después del procesado y la codificación.
+- **Todas las columnas** de la tabla que recibe el IF, después del procesado.
 - **Desviación poblacional (÷N)**, como `StandardScaler` de scikit-learn. Una columna constante (desviación 0) queda a 0.
 - **Parámetros:** la media y la desviación pueden ser las de estos datos o unas guardadas («Cargar parámetros…»). Así, febrero se normaliza con los parámetros de enero y todo tiene la misma forma estadística. Si a los parámetros les falta una columna de la tabla, es un error; si traen columnas de más, se avisa. Los parámetros cargados se mantienen al cambiar de CSV.
 - **Ficheros:** `parametros_zscore.csv` (`columna;media;desviacion`, con todas las cifras) y `dataset_normalizado.csv`. Este último se puede volver a cargar como «Una tabla ya hecha» sin normalizar otra vez.
-
-## Estimación de árboles y umbral
-
-Es el procedimiento 2 del artículo (`core/logica/estimar.ts`). Tiene tres fases, que la pantalla enseña con sus gráficos:
-
-1. **Subconjunto de registros normales (Fig. 5).** Se hace un IF sobre toda la tabla y se cogen los registros de la zona más repetida del histograma de scores. Tamaño: entre 256 registros y el 20 % de la tabla.
-2. **Número de árboles (Fig. 6).** Se contamina el 1 % de esos registros subiendo un 50 % una característica al azar y se prueba con 2, 4, 6… 100 árboles. Se propone el primero a partir del cual ya no mejora.
-3. **Umbral (Fig. 7).** Con esos árboles se contamina del 10 % al 200 % y se propone el umbral donde la curva se queda plana.
-
-Lo único que el artículo no concreta y se ha decidido aquí: la característica que se contamina se elige entre las que no valen 0 en ese registro, porque subir un 50 % un 0 sigue dando 0.
-
-La estimación se da por fiable si el IF encuentra los registros contaminados (F1 de al menos 0,8) y el umbral llega a estabilizarse. Si no, la pantalla lo avisa y el botón pasa a decir «Usarlos de todos modos». También avisa, aparte, si el subconjunto supera el 20 % de la tabla o si con los valores propuestos saldría más del 5 % de la tabla como anomalía.
-
-La estimación funciona mejor cuando los registros normales tienen valores en la mitad del rango de cada columna, como los niveles, caudales y presiones del artículo. Con contadores de consumo sale **poco fiable**. Los registros más normales son los de noche, con valores cerca de 0, y subirlos un 50 % apenas los mueve dentro del rango de su columna. Con 3 meses de agua y de electricidad de la UA, el IF solo encuentra 1 de los 17 registros contaminados.
 
 ## CSV y JSON de salida
 
 | Fichero | Dónde | Contenido |
 |---|---|---|
-| `dataset.csv` | Paso 2 (solo con CSV largo) | El dataset en columnas para volver a cargarlo como «Una tabla ya hecha» sin pivotar otra vez: columnas `tipo_uid`, con el filtro y el rango aplicados, sin procesado ni codificación. Solo se guarda si no le faltan datos. Al cargarlo da lo mismo que el CSV largo |
+| `dataset.csv` | Paso 2 (solo con CSV largo) | El dataset en columnas para volver a cargarlo como «Una tabla ya hecha» sin pivotar otra vez: columnas `tipo_uid`, con el filtro y el rango aplicados, sin procesado. Solo se guarda si no le faltan datos. Al cargarlo da lo mismo que el CSV largo |
 | `1_pivotado.csv` | Paso 2 | Una fila por momento y una columna por sensor, sin separar por tipo |
-| `2_fusionado.csv` | Paso 2 | La tabla preparada: columnas `tipo_uid` (p. ej. `electricityfacility_6339567`) más las del procesado, ya codificadas. Sin z-score. Se puede cargar directamente en el visualizador de Emilia |
+| `2_fusionado.csv` | Paso 2 | La tabla preparada: columnas `tipo_uid` (p. ej. `electricityfacility_6339567`) más las del procesado. Sin z-score. Se puede cargar directamente en el visualizador de Emilia |
 | `columnas.csv` | Paso 2 | Qué sensor y qué aulario hay detrás de cada columna |
-| `diccionario.csv` | Paso 2 | Diccionario de la codificación (`valor;codigo`). Se puede volver a cargar en el paso 2 |
 | `parametros_zscore.csv` | Paso 2 (con z-score) | Media y desviación de cada columna (`columna;media;desviacion`). Se puede volver a cargar para normalizar otros datos igual |
 | `dataset_normalizado.csv` | Paso 2 (con z-score) | La tabla que recibe el IF, normalizada, con todas las cifras y punto decimal |
 | `4_cif_semilla-N.csv` | Paso 5 | Tabla CIF: `registro`, `timestamp` (solo si hay fecha), `anomalia`, `clase`, `score`, `ii`, `ri` y el valor de cada partición |
 | `4_cif_particiones_semilla-N.csv` | Paso 5 | Resumen por partición |
-| `configuracion_semilla-N.json` | Arriba o paso 5 | Columnas, si el CSV tiene fecha, filtro, rango, procesado de características, diccionario, z-score con sus parámetros, parámetros del IF, semilla, contextos, ajustes de la estimación y cortes. Los JSON antiguos siguen funcionando: si no traen procesado, no se procesa nada, para repetir el resultado de entonces; si traen relleno, se ignora |
+| `configuracion_semilla-N.json` | Arriba o paso 5 | Columnas, si el CSV tiene fecha, filtro, rango, procesado de características, z-score con sus parámetros, parámetros del IF, semilla, contextos y cortes. Los JSON antiguos siguen funcionando: si no traen procesado, no se procesa nada, para repetir el resultado de entonces; si traen relleno, se ignora |
 
 `dataset.csv`, `1_pivotado.csv`, `2_fusionado.csv` y `dataset_normalizado.csv` usan el formato del visualizador de Emilia: separador `;` y fecha `DD/MM/YYYY HH:MM:SS`, con la hora tal cual viene en el CSV de entrada. Sin columna de fecha, la primera columna es `registro`. Los CSV de datos no llevan metadatos para no romper ese formato; la semilla va en el nombre del fichero y en el JSON.
 
@@ -201,33 +176,31 @@ src/app/
 │       ├── pivotar.ts                   pivotado y exportación a CSV
 │       ├── fusionar.ts                  fusión por tipo y orden de la preparación de datos (Fig. 1)
 │       ├── rango.ts                     rango de registros
-│       ├── preparar.ts                  procesado de características y codificación (procedimiento 1)
+│       ├── preparar.ts                  procesado de características
 │       ├── normalizar.ts                z-score y sus parámetros
 │       ├── filtrar.ts                   filtro por tipo, sensor y aulario; columnas.csv
 │       ├── contextos.ts                 contextos, particiones y su validación
 │       ├── semilla.ts                   generador con semilla y sustitución de Math.random
 │       ├── aplicar-isolation-forest.ts  parámetros y llamada al IF de Emilia
 │       ├── cif.ts                       IF global, IF por partición, RI, II y exportación
-│       ├── estimar.ts                   estimación de árboles y umbral (procedimiento 2)
 │       ├── clasificar.ts                grave / límite / normal
 │       └── configuracion.ts             JSON de configuración (guardar y cargar)
 ├── pagina-principal/                    el asistente de cinco pasos
 ├── ui/                                  barra de pasos y pestañas
 ├── vista-previa/                        primeras filas de una tabla
-├── panel-preparacion/                   procesado de características y codificación (paso 2)
+├── panel-preparacion/                   procesado de características (paso 2)
 ├── panel-filtros/                       filtro de lecturas (paso 2)
 ├── panel-rango/                         rango de registros (paso 2)
 ├── editor-contextos/                    contextos y particiones (paso 3)
-├── panel-estimacion/                    estimación de árboles y umbral (paso 4)
 ├── resultados/                          resumen y pestañas (paso 5)
 ├── tabla-cif/                           tabla CIF
 ├── comparacion-particiones/             comparación de contextos y particiones
-└── graficos/                            gráficos en SVG hechos a mano (histograma, líneas, burbujas, particiones)
+└── graficos/                            gráficos en SVG hechos a mano (líneas, burbujas, particiones)
 ```
 
 Los gráficos no usan librería a propósito:
 
-- **Fidelidad al artículo:** reproducen las Fig. 5 a 9 tal cual (paneles, métricas y zonas grave / límite), algo difícil de conseguir ajustando el estilo de una librería.
+- **Fidelidad al artículo:** reproducen las Fig. 8 y 9 tal cual (paneles, métricas y zonas grave / límite), algo difícil de conseguir ajustando el estilo de una librería.
 - **Accesibilidad:** son SVG, que se pueden recorrer con teclado, y cada uno tiene su tabla alternativa. Las librerías habituales (Chart.js, ECharts) dibujan en un `<canvas>`, que un lector de pantalla no puede leer.
 - **Sin dependencias nuevas:** la aplicación pesa menos y no depende de que una librería siga siendo compatible con Angular.
 

@@ -18,7 +18,7 @@
  *     el z-score").
  *   - Si una columna tiene desviación 0 (es constante), queda a 0 en vez de
  *     dividir entre 0. Es lo que hace StandardScaler.
- *   - Los parámetros van en CSV (columna;media;desviacion), como el diccionario,
+ *   - Los parámetros van en CSV (columna;media;desviacion),
  *     con punto decimal y todas las cifras, para que al cargarlos salgan
  *     exactamente los mismos números.
  */

@@ -1,14 +1,12 @@
 /**
- * Fases 3.1.1 y 3.1.2 del procedimiento 1 del artículo (preparación de datos).
+ * Procesado de características (preparación de datos del artículo).
  *
- * El orden es el de la Fig. 1: procesado de características → codificación →
- * valores nulos → contextos. Los nulos no los trata la herramienta: se tratan
- * antes de cargar el CSV, y si falta algún dato fusionar.ts da un error. Los
- * contextos están en contextos.ts. Aquí van las dos primeras fases, que se
- * aplican a la tabla alineada (ya sin huecos).
+ * Los nulos no los trata la herramienta: se tratan antes de cargar el CSV, y si
+ * falta algún dato fusionar.ts da un error. Los contextos están en contextos.ts.
+ * El procesado se aplica a la tabla alineada (ya sin huecos).
  *
- * 3.1.1 Procesado de características. Una lista de operaciones (la "Config" del
- * artículo) que se aplican una detrás de otra:
+ * Una lista de operaciones (la "Config" del artículo) que se aplican una detrás
+ * de otra:
  *   - Extracción (F, Fextrac, op): saca una característica nueva de F. Para fechas,
  *     día, mes, año, hora, minuto o día de la semana; para texto, un trozo.
  *   - Combinación (F1, F2, Fcomb): junta F1 y F2 en una característica nueva.
@@ -18,29 +16,20 @@
  *   DD, MM, HH y MIN de la fecha. La fecha original deja de ser característica,
  *   como en el artículo; aquí nunca lo fue, solo identifica la fila.
  *
- * 3.1.2 Codificación. Un diccionario valor de texto → número, único para toda la
- * tabla. Puede empezar vacío o cargado. Cada valor que ya está se cambia por su
- * número; si no está, se le da uno nuevo y se añade. Las características que ya
- * son numéricas no se tocan (4.2.2).
+ * Después del procesado, todas las columnas tienen que ser numéricas: el
+ * Isolation Forest solo trabaja con números. Si alguna no lo es, es un error.
  *
  * Lo que el artículo no concreta y aquí se ha decidido:
- *   - La combinación concatena los dos valores como texto (F1_F2). Como la
- *     codificación va después, el resultado se convierte en número con el
- *     diccionario. Si falta uno de los dos valores, el resultado es un hueco
- *     y fusionar.ts da un error (la herramienta no trata los nulos).
+ *   - La combinación concatena los dos valores como texto (F1_F2). Si falta uno
+ *     de los dos valores, el resultado es un hueco y fusionar.ts da un error (la
+ *     herramienta no trata los nulos).
  *   - La hora, el día... se leen tal cual están escritos en el CSV, sin cambiar
  *     de zona horaria, igual que se hace al exportar los CSV.
- *   - Una característica es cualitativa si tiene algún valor que no es un número.
- *     Entonces se codifican todos sus valores, para que un "1" de texto no se
- *     confunda con el número 1 de otra categoría.
- *   - Los códigos empiezan en 1.
  */
-import * as Papa from 'papaparse';
-
 import type { TablaPivotada } from './pivotar';
 
 // ---------------------------------------------------------------------------
-// 3.1.1 Procesado de características
+// Procesado de características
 // ---------------------------------------------------------------------------
 
 /** Qué se saca en una extracción. */
@@ -263,11 +252,8 @@ export function procesarCaracteristicas(
 }
 
 // ---------------------------------------------------------------------------
-// 3.1.2 Codificación
+// Números
 // ---------------------------------------------------------------------------
-
-/** Diccionario de la codificación: valor de texto → número. */
-export type Diccionario = Record<string, number>;
 
 /**
  * Convierte el texto de una celda en número. Devuelve NaN si no lo es (y si
@@ -294,97 +280,53 @@ export function esNumero(texto: string): boolean {
   return Number.isFinite(aNumero(texto));
 }
 
-/** Comprueba un diccionario cargado. Devuelve un mensaje de error, o null si está bien. */
-export function validarDiccionario(d: unknown): string | null {
-  if (typeof d !== 'object' || d === null || Array.isArray(d)) {
-    return 'El diccionario debe ser un objeto { "valor": número }.';
-  }
-  const codigos = Object.values(d);
-  if (!codigos.every((c) => typeof c === 'number' && Number.isFinite(c))) {
-    return 'Todos los códigos del diccionario deben ser números.';
-  }
-  if (new Set(codigos).size !== codigos.length) {
-    return 'Hay dos valores con el mismo código en el diccionario.';
-  }
-  return null;
-}
-
-export interface ResultadoCodificacion {
-  tabla: TablaPivotada;
-  /** El diccionario de entrada con los valores nuevos añadidos. */
-  diccionario: Diccionario;
-  /** Columnas que se han codificado (las que tenían algún valor que no es un número). */
-  columnasCodificadas: string[];
-  /** Cuántos valores se han añadido al diccionario. */
-  valoresNuevos: number;
-}
-
 /**
- * Codifica las características cualitativas. Recorre las columnas de izquierda a
- * derecha y las filas de arriba abajo, así que con los mismos datos y el mismo
- * diccionario de entrada sale siempre lo mismo. Los huecos se quedan como huecos.
+ * Columnas con algún valor que no es un número (los huecos no cuentan). El
+ * Isolation Forest solo trabaja con números, así que la tabla no puede tenerlas.
  */
-export function codificar(tabla: TablaPivotada, entrada: Diccionario = {}): ResultadoCodificacion {
-  const diccionario: Diccionario = { ...entrada };
-  let siguiente = Math.max(0, ...Object.values(diccionario)) + 1;
-  let valoresNuevos = 0;
-
-  const codificadas = tabla.ids
-    .map((_, c) => c)
-    .filter((c) => tabla.filas.some((f) => f.valores[c] !== '' && !esNumero(f.valores[c])));
-  const filas = tabla.filas.map((f) => ({ timestamp: f.timestamp, valores: [...f.valores] }));
-
-  for (const c of codificadas) {
-    for (const fila of filas) {
-      const v = fila.valores[c];
-      if (v === '') {
-        continue;
-      }
-      if (!Object.hasOwn(diccionario, v)) {
-        diccionario[v] = siguiente++;
-        valoresNuevos++;
-      }
-      fila.valores[c] = String(diccionario[v]);
-    }
-  }
-
-  return {
-    tabla: { ...tabla, filas },
-    diccionario,
-    columnasCodificadas: codificadas.map((c) => tabla.ids[c]),
-    valoresNuevos,
-  };
+export function columnasNoNumericas(tabla: TablaPivotada): string[] {
+  return tabla.ids.filter((_, c) =>
+    tabla.filas.some((f) => f.valores[c] !== '' && !esNumero(f.valores[c])),
+  );
 }
 
-/** El diccionario como CSV (valor;codigo), ordenado por código. */
-export function diccionarioACsv(d: Diccionario): string {
-  const comillas = (t: string) => (/[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t);
-  const filas = Object.entries(d)
-    .sort((a, b) => a[1] - b[1])
-    .map(([valor, codigo]) => `${comillas(valor)};${codigo}`);
-  return ['valor;codigo', ...filas].join('\n') + '\n';
+/** Lanza un error, con el nombre de las columnas, si alguna no es numérica. */
+export function comprobarNumerica(tabla: TablaPivotada): void {
+  const noNumericas = columnasNoNumericas(tabla);
+  if (noNumericas.length === 0) {
+    return;
+  }
+  const maximo = 12;
+  const nombres =
+    noNumericas.slice(0, maximo).join(', ') +
+    (noNumericas.length > maximo ? ` y ${noNumericas.length - maximo} más` : '');
+  const una = noNumericas.length === 1;
+  throw new Error(
+    `${una ? 'La columna' : 'Las columnas'} ${nombres} ${una ? 'tiene' : 'tienen'} ` +
+      'valores que no son números. El Isolation Forest solo trabaja con números: ' +
+      'revisa el CSV (por ejemplo, decimales mal escritos) o las operaciones del procesado.',
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Las dos fases juntas
+// Preparación
 // ---------------------------------------------------------------------------
 
 export interface Preparacion {
-  /** Operaciones del procesado de características (3.1.1), en orden. */
+  /** Operaciones del procesado de características, en orden. */
   operaciones: Operacion[];
-  /** Diccionario de entrada de la codificación (3.1.2). Puede estar vacío. */
-  diccionario: Diccionario;
 }
 
-/** Sin procesado ni diccionario: la tabla pasa tal cual (salvo codificar lo que sea texto). */
-export const SIN_PREPARACION: Preparacion = { operaciones: [], diccionario: {} };
+/** Sin procesado: la tabla pasa tal cual. */
+export const SIN_PREPARACION: Preparacion = { operaciones: [] };
 
-export interface ResultadoPreparacion extends ResultadoCodificacion {
+export interface ResultadoPreparacion {
+  tabla: TablaPivotada;
   /** Características que ha añadido el procesado. */
   columnasNuevas: string[];
 }
 
-/** Procesado (3.1.1) y después codificación (3.1.2), como en la Fig. 1. */
+/** Procesado de características. Lanza un error si una operación está mal puesta. */
 export function prepararCaracteristicas(
   tabla: TablaPivotada,
   p: Preparacion,
@@ -393,45 +335,10 @@ export function prepararCaracteristicas(
   if (error) {
     throw new Error(error);
   }
-  const errorDiccionario = validarDiccionario(p.diccionario);
-  if (errorDiccionario) {
-    throw new Error(errorDiccionario);
-  }
   const procesada = procesarCaracteristicas(tabla, p.operaciones);
   const antes = new Set(tabla.ids);
   return {
-    ...codificar(procesada, p.diccionario),
+    tabla: procesada,
     columnasNuevas: procesada.ids.filter((id) => !antes.has(id)),
   };
-}
-
-/**
- * Lee un diccionario en el CSV que genera diccionarioACsv (valor;codigo, con
- * cabecera). Lanza un Error con un mensaje entendible si no tiene ese formato.
- */
-export function leerDiccionarioCsv(texto: string): Diccionario {
-  const { data } = Papa.parse<string[]>(texto.replace(/^﻿/, ''), {
-    delimiter: ';',
-    skipEmptyLines: true,
-  });
-  const [cabecera, ...filas] = data;
-  if (!cabecera || cabecera[0]?.trim() !== 'valor' || cabecera[1]?.trim() !== 'codigo') {
-    throw new Error('El diccionario debe ser un CSV con la cabecera "valor;codigo".');
-  }
-  const d: Diccionario = {};
-  for (const [i, fila] of filas.entries()) {
-    const codigo = Number(fila[1]);
-    if (fila.length < 2 || fila[1].trim() === '' || !Number.isFinite(codigo)) {
-      throw new Error(`Fila ${i + 2} del diccionario: el código debe ser un número.`);
-    }
-    if (Object.hasOwn(d, fila[0])) {
-      throw new Error(`El valor "${fila[0]}" sale dos veces en el diccionario.`);
-    }
-    d[fila[0]] = codigo;
-  }
-  const error = validarDiccionario(d);
-  if (error) {
-    throw new Error(error);
-  }
-  return d;
 }

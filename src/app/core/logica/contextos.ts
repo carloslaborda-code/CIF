@@ -1,5 +1,5 @@
 /**
- * Contextos y particiones del artículo "Contextual Isolation Forests" (apartado 3.1.4).
+ * Contextos y particiones del artículo "Contextual Isolation Forests".
  *
  * - Un contexto es un punto de vista para analizar las anomalías
  *   (por ejemplo "por tipo de medida" o "por zona").

@@ -1,19 +1,3 @@
-<!-- Leyenda: solo hace falta si hay más de una línea -->
-@if (series().length > 1) {
-  <ul class="mb-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
-    @for (s of series(); track s.nombre) {
-      <li class="flex items-center gap-2">
-        <span
-          class="h-0.5 w-5 rounded"
-          [style.background-color]="s.color"
-          aria-hidden="true"
-        ></span>
-        {{ s.nombre }}
-      </li>
-    }
-  </ul>
-}
-
 <!-- relative: el recuadro con los valores se coloca encima del dibujo -->
 <div class="relative">
   <!-- tabindex="0": se puede llegar con el tabulador y moverse con las flechas -->
@@ -91,17 +75,6 @@
         stroke-dasharray="6 4"
       />
     }
-    @for (l of lineasV(); track l.etiqueta) {
-      <line
-        [attr.x1]="px()(l.valor)"
-        [attr.x2]="px()(l.valor)"
-        [attr.y1]="margen.arriba"
-        [attr.y2]="alto() - margen.abajo"
-        stroke="#334155"
-        stroke-width="1.5"
-        stroke-dasharray="6 4"
-      />
-    }
 
     <!-- Las series -->
     @for (t of trazos(); track t.nombre) {
@@ -113,11 +86,6 @@
         stroke-linejoin="round"
         stroke-linecap="round"
       />
-      @if (conPuntos()) {
-        @for (p of t.puntos; track p.x) {
-          <circle [attr.cx]="px()(p.x)" [attr.cy]="py()(p.y)" r="3" [attr.fill]="t.color" />
-        }
-      }
     }
 
     <!-- Puntos destacados, con un borde blanco para que se distingan de la línea -->
@@ -135,17 +103,6 @@
     <!-- Textos de las líneas de referencia: al final, para que queden encima de los datos -->
     @for (l of lineasH(); track l.etiqueta) {
       <text class="grafico-etiqueta" [attr.x]="margen.izquierda + 6" [attr.y]="py()(l.valor) - 6">
-        {{ l.etiqueta }}
-      </text>
-    }
-    @for (l of lineasV(); track l.etiqueta) {
-      <!-- A la derecha de la línea, o a la izquierda si no cabe -->
-      <text
-        class="grafico-etiqueta"
-        [attr.x]="px()(l.valor) + (px()(l.valor) > ANCHO * 0.7 ? -6 : 6)"
-        [attr.y]="alto() - margen.abajo - 8"
-        [attr.text-anchor]="px()(l.valor) > ANCHO * 0.7 ? 'end' : 'start'"
-      >
         {{ l.etiqueta }}
       </text>
     }

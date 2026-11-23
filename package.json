@@ -8,8 +8,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "node pruebas/ejecutar.mjs",
-    "comparar": "node pruebas/ejecutar.mjs --script pruebas/comparar-motores.ts",
-    "estimar": "node pruebas/ejecutar.mjs --script pruebas/estimar-datos.ts"
+    "comparar": "node pruebas/ejecutar.mjs --script pruebas/comparar-motores.ts"
   },
   "private": true,
   "packageManager": "npm@10.9.4",
