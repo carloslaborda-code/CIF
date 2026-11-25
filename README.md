@@ -32,7 +32,7 @@ Abre http://localhost:4200. La aplicación es un asistente de cinco pasos; la ba
 3. **Contextos.** Un contexto es una forma de mirar la instalación (por tipo, por edificio…) y sus particiones son los grupos de sensores que salen al mirarla así. Se pueden crear a mano o con «Contexto automático por tipo de medida». Sin contextos solo se calcula el IF global, sin RI ni II.
 4. **Ajustes.** Parámetros del Isolation Forest y semilla.
 5. **Resultados.** Resumen arriba (registros y anomalías globales) y cinco pestañas. Cada fila se identifica por su número de registro:
-   - **Tabla:** la tabla CIF, como la Tabla 5 del artículo.
+   - **Tabla:** la tabla CIF, como la Tabla 5 del artículo, entera: todas las filas (por páginas) y todas las columnas del CSV de resultados. Por defecto, por score del IF global; se puede ordenar por número de registro, II o RI, filtrar e ir directamente a un registro.
    - **Mapa RI–II:** un círculo por cada registro que es anomalía en alguna partición, según su II (horizontal) y su RI (vertical); el tamaño es el score global. Se fijan un corte de RI y otro de II: los que quedan por encima de los dos son **anomalías CIF** (rojos) y el resto no (verdes). No tienen por qué coincidir con las anomalías globales.
    - **En el tiempo:** score global por número de registro.
    - **Contextos:** comparación de contextos y particiones.

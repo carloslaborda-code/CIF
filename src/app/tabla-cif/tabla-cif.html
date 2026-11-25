@@ -1,8 +1,8 @@
-<!-- Controles: qué registros, cuántas filas y por qué columna ordenar -->
+<!-- Controles: qué registros, en qué orden y cuántos por página -->
 <div class="flex flex-wrap items-end gap-4">
   <label class="etiqueta">
     Registros
-    <select class="campo" [ngModel]="filtro()" (ngModelChange)="filtro.set($event)">
+    <select class="campo" [ngModel]="filtro()" (ngModelChange)="cambiarFiltro($event)">
       <option value="todos">Todos</option>
       <option value="particion">Anomalía en alguna partición</option>
       <option value="cif">Solo anomalías CIF</option>
@@ -11,32 +11,95 @@
   </label>
   <label class="etiqueta">
     Ordenar por
-    <select class="campo" [ngModel]="orden()" (ngModelChange)="orden.set($event)">
+    <select class="campo" [ngModel]="orden()" (ngModelChange)="cambiarOrden($event)">
       <option value="score">Score del IF global</option>
+      <option value="registro">Número de registro</option>
       <option value="ii">II (intensidad)</option>
       <option value="ri">RI (recurrencia)</option>
     </select>
   </label>
   <label class="etiqueta">
-    Filas a la vista
-    <select class="campo" [ngModel]="numFilas()" (ngModelChange)="numFilas.set(+$event)">
-      @for (n of opcionesNumFilas; track n) {
+    Filas por página
+    <select
+      class="campo"
+      [ngModel]="tamanoPagina()"
+      (ngModelChange)="cambiarTamanoPagina(+$event)"
+    >
+      @for (n of opcionesTamanoPagina; track n) {
         <option [value]="n">{{ n }}</option>
       }
     </select>
   </label>
-  <!-- aria-live: al cambiar las filas, el lector de pantalla dice cuántas se ven -->
-  <p class="pb-2 text-sm text-slate-600" aria-live="polite">
-    Se ven {{ filasVisibles().length }} de {{ totalFiltradas() }} registros, de mayor a menor.
+  <!-- Ir directamente a un registro -->
+  <form class="flex items-end gap-2" (ngSubmit)="irARegistro(campoRegistro.value)">
+    <label class="etiqueta">
+      Ir al registro
+      <input #campoRegistro class="campo !w-32" type="number" min="1" step="1" />
+    </label>
+    <button type="submit" class="btn-secundario">Ir</button>
+  </form>
+</div>
+@if (avisoIr(); as aviso) {
+  <p class="text-sm text-red-800" role="alert">{{ aviso }}</p>
+}
+
+<!-- Páginas. aria-live: al cambiar de página, el lector de pantalla dice qué filas se ven -->
+<ng-template #paginacion>
+  <div class="flex flex-wrap items-center gap-2 text-sm">
+    <button
+      type="button"
+      class="btn-secundario btn-pequeno"
+      [disabled]="paginaActual() === 0"
+      (click)="irAPagina(0)"
+    >
+      « Primera
+    </button>
+    <button
+      type="button"
+      class="btn-secundario btn-pequeno"
+      [disabled]="paginaActual() === 0"
+      (click)="irAPagina(paginaActual() - 1)"
+    >
+      ‹ Anterior
+    </button>
+    <span class="px-1 text-slate-700">
+      Página {{ paginaActual() + 1 }} de {{ numPaginas() }}
+    </span>
+    <button
+      type="button"
+      class="btn-secundario btn-pequeno"
+      [disabled]="paginaActual() === numPaginas() - 1"
+      (click)="irAPagina(paginaActual() + 1)"
+    >
+      Siguiente ›
+    </button>
+    <button
+      type="button"
+      class="btn-secundario btn-pequeno"
+      [disabled]="paginaActual() === numPaginas() - 1"
+      (click)="irAPagina(numPaginas() - 1)"
+    >
+      Última »
+    </button>
+  </div>
+</ng-template>
+
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="text-sm text-slate-600" aria-live="polite">
+    @if (totalFiltradas() > 0) {
+      Filas {{ desde() }}–{{ hasta() }} de {{ totalFiltradas() }}.
+    }
   </p>
+  <ng-container *ngTemplateOutlet="paginacion" />
 </div>
 
 @if (filasVisibles().length === 0) {
   <p class="aviso-info">No hay ningún registro así.</p>
 } @else {
   <!-- Tabla como la Tabla 5 del artículo. tabindex="0": la caja con scroll se puede recorrer con el teclado -->
+  <!-- Con altura máxima y cabecera fija, para ver todas las columnas con scroll -->
   <div
-    class="overflow-auto rounded-lg border border-slate-200"
+    class="max-h-[70vh] overflow-auto rounded-lg border border-slate-200"
     tabindex="0"
     role="region"
     aria-label="Tabla de resultados del CIF"
@@ -45,7 +108,7 @@
       <caption class="sr-only">
         Registros con su score global, sus indicadores II y RI y su valor en cada partición
       </caption>
-      <thead class="bg-slate-100 text-slate-800">
+      <thead class="sticky top-0 z-10 bg-slate-100 text-slate-800">
         <!-- Primera fila de cabecera: los grupos -->
         <tr>
           <th
@@ -100,7 +163,12 @@
       </thead>
       <tbody class="tabular-nums text-slate-900">
         @for (f of filasVisibles(); track f.id) {
-          <tr class="border-t border-slate-200">
+          <tr
+            class="border-t border-slate-200"
+            [class.outline]="f.registro === resaltado()"
+            [class.outline-2]="f.registro === resaltado()"
+            [class.outline-blue-700]="f.registro === resaltado()"
+          >
             <td class="px-3 py-1.5" [class.font-semibold]="f.anomalia">
               {{ f.anomalia ? 'Sí' : 'No' }}
             </td>
@@ -113,7 +181,7 @@
             }
             <td
               class="px-3 py-1.5 text-right"
-              [style.background-color]="color(f.score, escalaScore())"
+              [style.background-color]="color(f.score)"
             >
               {{ f.score.toFixed(3) }}
             </td>
@@ -124,7 +192,7 @@
               @if (v !== null) {
                 <td
                   class="px-3 py-1.5 text-right"
-                  [style.background-color]="color(v, escalaParticiones())"
+                  [style.background-color]="color(v)"
                 >
                   {{ v.toFixed(2) }}
                 </td>
@@ -137,6 +205,7 @@
       </tbody>
     </table>
   </div>
+  <ng-container *ngTemplateOutlet="paginacion" />
 }
 
 <details class="text-sm">
@@ -164,6 +233,10 @@
       {{ cortes().ii }}. Los cortes se cambian en la pestaña «Mapa RI–II». No tiene por qué
       coincidir con la anomalía global.
     </li>
-    <li>Los colores van de verde (lo más bajo de lo que se ve) a rojo (lo más alto).</li>
+    <li>
+      <strong>Colores:</strong> solo se pintan los scores por encima del umbral
+      ({{ resultado().umbral }}), de amarillo (justo en el umbral) a rojo (el score más alto de
+      los resultados). Lo que no es anomalía va sin color.
+    </li>
   </ul>
 </details>

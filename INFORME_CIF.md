@@ -53,7 +53,7 @@ Es una aplicación web (Angular) que funciona entera en el navegador, sin servid
 3. **Contextos.** Un contexto es un punto de vista (por ejemplo "por tipo de suministro" o "por edificio") y sus particiones son grupos de columnas. Se pueden crear a mano o automáticamente por tipo.
 4. **Ajustes.** Parámetros del Isolation Forest y semilla.
 5. **Resultados.** Un resumen (registros y anomalías globales) y cinco pestañas. Cada fila se identifica por su número de registro:
-   - la tabla CIF (como la Tabla 5);
+   - la tabla CIF (como la Tabla 5), entera y por páginas, ordenada por score (o por registro, II o RI), con filtros y «Ir al registro»;
    - el mapa RI–II (Fig. 9), con los cortes de RI e II que deciden qué es anomalía CIF;
    - el score en el tiempo;
    - la comparación de contextos;
